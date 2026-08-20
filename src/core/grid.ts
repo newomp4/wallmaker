@@ -49,14 +49,26 @@ export function autoGrid(n: number, compW: number, compH: number, gap: number, m
   return best ?? { rows: 1, cols: Math.max(1, n) }
 }
 
-/** The concrete grid for a config: rows/cols (auto or manual) + cell and wall sizes in px. The wall is always centered in the comp. */
+/**
+ * The concrete grid for a config: rows/cols + cell and wall sizes in px. The wall is always centered.
+ *
+ * In 'cover' mode the cell keeps the size it would have had — so screens stay the shape and scale
+ * you set — and whole extra rows/columns are added until the wall reaches past the comp edges. Those
+ * outer screens are cut off by the frame, which is the point: no black bands, nothing stretched.
+ */
 export function gridFor(cfg: Config): GridSpec {
   const n = Math.max(1, cfg.videos.length + cfg.comps.length || 12)
   const aspect = aspectOf(cfg)
-  const { rows, cols } = cfg.gridMode === 'manual' ? { rows: Math.max(1, cfg.rows), cols: Math.max(1, cfg.cols) } : autoGrid(n, cfg.compW, cfg.compH, cfg.gap, cfg.margin, aspect)
+  const base = cfg.gridMode === 'manual' ? { rows: Math.max(1, cfg.rows), cols: Math.max(1, cfg.cols) } : autoGrid(n, cfg.compW, cfg.compH, cfg.gap, cfg.margin, aspect)
   const availW = Math.max(1, cfg.compW - 2 * cfg.margin)
   const availH = Math.max(1, cfg.compH - 2 * cfg.margin)
-  const cell = cellFor(rows, cols, availW, availH, cfg.gap, aspect) ?? { cellW: Math.max(1, availW / cols), cellH: Math.max(1, availH / rows) }
+  const cell = cellFor(base.rows, base.cols, availW, availH, cfg.gap, aspect) ?? { cellW: Math.max(1, availW / base.cols), cellH: Math.max(1, availH / base.rows) }
+  let { rows, cols } = base
+  // stretched cells already cover the comp exactly, so 'cover' only has work to do with a locked shape
+  if (cfg.wallFit === 'cover' && aspect !== null) {
+    cols = Math.max(cols, Math.min(200, Math.ceil((availW + cfg.gap) / (cell.cellW + cfg.gap))))
+    rows = Math.max(rows, Math.min(200, Math.ceil((availH + cfg.gap) / (cell.cellH + cfg.gap))))
+  }
   return {
     rows,
     cols,
@@ -65,6 +77,13 @@ export function gridFor(cfg: Config): GridSpec {
     wallW: cell.cellW * cols + cfg.gap * (cols - 1),
     wallH: cell.cellH * rows + cfg.gap * (rows - 1),
   }
+}
+
+/** Is this cell fully inside the comp frame, or is it one of the ones the frame cuts off? */
+export function cellOnscreen(row: number, col: number, cfg: Config, grid: GridSpec): boolean {
+  const x = (col - (grid.cols - 1) / 2) * (grid.cellW + cfg.gap)
+  const y = (row - (grid.rows - 1) / 2) * (grid.cellH + cfg.gap)
+  return Math.abs(x) + grid.cellW / 2 <= cfg.compW / 2 + 0.5 && Math.abs(y) + grid.cellH / 2 <= cfg.compH / 2 + 0.5
 }
 
 /** Comp left over around the wall, px per side. 0 = the wall reaches the comp edges. */
@@ -142,4 +161,13 @@ export function fillGrid(cfg: Config): Partial<Config> {
     }
   }
   return { gridMode: 'manual', rows: best.rows, cols: best.cols, cellAspect: 'fill' }
+}
+
+/** How many cells the comp frame cuts off. 0 when the whole wall is visible. */
+export function offscreenCount(cfg: Config, grid: GridSpec): number {
+  let cols = 0
+  let rows = 0
+  for (let c = 0; c < grid.cols; c++) if (Math.abs((c - (grid.cols - 1) / 2) * (grid.cellW + cfg.gap)) + grid.cellW / 2 <= cfg.compW / 2 + 0.5) cols++
+  for (let r = 0; r < grid.rows; r++) if (Math.abs((r - (grid.rows - 1) / 2) * (grid.cellH + cfg.gap)) + grid.cellH / 2 <= cfg.compH / 2 + 0.5) rows++
+  return grid.rows * grid.cols - rows * cols
 }

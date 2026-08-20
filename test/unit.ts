@@ -4,7 +4,7 @@
  */
 import { DEFAULT_CONFIG } from '../src/core/defaults.ts'
 import type { Config } from '../src/core/types.ts'
-import { gridFor, autoGrid, aspectOf, bandsFor, fillGrid } from '../src/core/grid.ts'
+import { gridFor, autoGrid, aspectOf, bandsFor, fillGrid, cellOnscreen, offscreenCount } from '../src/core/grid.ts'
 import { planScreens, planCamera, cameraAt, zoomAt, screenStateAt, withAnimation, centerCell } from '../src/core/reveal.ts'
 import { compileWall, buildKeyFor } from '../src/core/scene.ts'
 
@@ -68,6 +68,31 @@ const cfg = (p: Partial<Config>): Config => ({ ...DEFAULT_CONFIG, videos: Array.
   check('fill works on a vertical comp', vfill.cellAspect === 'wide' && Math.abs(vg.cellW / vg.cellH / (16 / 9) - 1) < 0.002 && vb.x <= 1 && vb.y <= 1, `${vg.rows}x${vg.cols} gap ${vfill.gap}`)
 }
 
+// ---- 'cover': keep the cell shape, let the outer screens run off the frame ----
+{
+  for (const [shape, want, w, h, rows, cols] of [
+    ['tall', 9 / 16, 1920, 1080, 3, 9],
+    ['wide', 16 / 9, 1080, 1920, 5, 3],
+    ['square', 1, 1920, 1080, 4, 4],
+  ] as const) {
+    const c = cfg({ gridMode: 'manual', rows, cols, cellAspect: shape, wallFit: 'cover', gap: 8, margin: 0, compW: w, compH: h, videos: Array.from({ length: 8 }, (_, i) => `/v/${i}.mp4`) })
+    const g = gridFor(c)
+    const b = bandsFor(c, g)
+    check(`cover ${shape}: cells keep their exact shape`, Math.abs(g.cellW / g.cellH / want - 1) < 0.002, (g.cellW / g.cellH).toFixed(4))
+    check(`cover ${shape}: the wall reaches past both comp edges`, g.wallW >= w - 0.5 && g.wallH >= h - 0.5, `${Math.round(g.wallW)}x${Math.round(g.wallH)}`)
+    check(`cover ${shape}: no bands`, b.x === 0 && b.y === 0)
+    check(`cover ${shape}: only grows the grid, never shrinks it`, g.rows >= rows && g.cols >= cols, `${g.rows}x${g.cols}`)
+    const screens = planScreens(c, g)
+    const visible = screens.filter((s) => cellOnscreen(s.row, s.col, c, g))
+    check(`cover ${shape}: every source is visible in frame`, new Set(visible.map((s) => s.v)).size === 8, `${new Set(visible.map((s) => s.v)).size}/8`)
+    check(`cover ${shape}: the cut-off cells are the duplicates`, screens.length - visible.length === offscreenCount(c, g) && offscreenCount(c, g) > 0)
+  }
+  // stretched cells already cover exactly, so 'cover' must be a no-op there
+  const fillA = cfg({ gridMode: 'manual', rows: 3, cols: 5, cellAspect: 'fill', wallFit: 'contain' })
+  const fillB = { ...fillA, wallFit: 'cover' as const }
+  check('cover does nothing to stretched cells', JSON.stringify(gridFor(fillA)) === JSON.stringify(gridFor(fillB)))
+}
+
 // ---- reveal patterns ----
 {
   const base = { animate: true, gridMode: 'manual' as const, rows: 5, cols: 5, jitter: 0 }
@@ -93,8 +118,10 @@ const cfg = (p: Partial<Config>): Config => ({ ...DEFAULT_CONFIG, videos: Array.
   for (const x of s) counts[x.v]++
   check('shuffle spreads the duplicates evenly', Math.max(...counts) - Math.min(...counts) <= 1, counts.join('/'))
   check('duplicates are scattered, not in blocks', s.slice(0, 5).map((x) => x.v).join('') !== '01201')
-  const offs = new Set(s.filter((x) => x.v === 0).map((x) => x.offset))
-  check('same-source screens all start at different points', offs.size === counts[0])
+  const offs = s.filter((x) => x.v === 0).map((x) => x.offset).sort((a, b) => a - b)
+  check('same-source screens all start at different points', new Set(offs).size === counts[0], offs.join(' '))
+  const minGap = Math.min(...offs.slice(1).map((v, i) => v - offs[i]))
+  check('and are spread across the clip, not clustered', minGap > 0.2 / counts[0], `min gap ${minGap.toFixed(4)}`)
 }
 
 // ---- thresholds & the centered screen ----

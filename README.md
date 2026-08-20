@@ -9,12 +9,15 @@ Point it at a folder of videos (or select comps right in your project), choose t
 **Sources**
 - A folder of videos (searched recursively), individual files, drag & drop — or **comps from your open project** ("From selection"): they render live on the wall, no export needed.
 - Fewer sources than screens? They repeat — shuffled by default, so duplicates scatter across the wall instead of running in order, and the leftover cells are filled by a random pick rather than always the first few files.
+- Duplicates of one clip get **stratified start points**: their offsets are spread across the clip rather than drawn independently, so two copies never sit on the same frame and read as one video.
 - Every screen can start at a **random point** in its clip, looped, muted — a wall of one video won't look synchronized.
 
 **The grid**
 - Automatic rows × columns from your source count, or set them yourself — 2×2 to 1000+ screens. Every cell is exactly the same size.
 - **Cell shape lock**: keep every screen 16:9 / 4:3 / 1:1 / 9:16 / custom — the wall centers itself instead of stretching; or fill the comp edge-to-edge.
-- **Fill comp**: a locked cell shape only reaches the comp edges when the grid happens to match the comp's aspect — otherwise you get letterbox bands. The panel tells you how big they are, and one click solves for the rows × columns **and gap** that reach the edges with cells *exactly* that shape. 9:16 screens filling a 1920×1080 comp: 3 × 9 with a 21.08 px gap, no bands.
+- **No black bands, two ways.** A locked cell shape only reaches the comp edges when the grid happens to match the comp's aspect. The panel always tells you how big the bands are, and you pick how to kill them:
+  - **Fit exactly** — one click solves for the rows × columns *and gap* that reach the edges with cells of exactly that shape. 9:16 screens in a 1920×1080 comp: 3 × 9 at a 21.08 px gap.
+  - **Wall: Cover** — keep your shape *and* your gap, and add whole rows/columns until the wall runs past the comp edges. The outer screens are simply cut off by the frame. 9:16 at gap 8 becomes 3 × 10 with 6 screens off-frame — and the sources are dealt onto the in-frame cells first, so every clip is still seen and the cut-off cells hold the duplicates.
 - Gap, outer margin, rounded corners. Video fit per screen: Fill (crop), Fit (letterbox) or Stretch.
 - **Arrangements** — one-click grid presets (Auto, Edge to edge, 16:9 cells, 3×3, 4×3, 5×5, Spaced).
 - A **quick bar** under the live preview holds the tune-while-you-watch controls (grid, gap, cell shape, seed).

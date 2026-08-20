@@ -6,6 +6,8 @@ export type Assign = 'sequential' | 'shuffle' | 'random'
 export type Background = 'solid' | 'transparent'
 export type RevealMode = 'none' | 'random' | 'rows' | 'cols' | 'sequence' | 'snake' | 'center' | 'edges' | 'spiral' | 'diagonal'
 export type CellAspect = 'fill' | 'wide' | 'tv' | 'square' | 'tall' | 'custom'
+/** how the wall relates to the comp frame: sit inside it, or cover it and run off the edges */
+export type WallFit = 'contain' | 'cover'
 export type ScreenAnim = 'cut' | 'fade' | 'flicker' | 'pop'
 
 export interface CompRef {
@@ -40,6 +42,12 @@ export interface Config {
   cellAspect: CellAspect
   /** w/h when cellAspect is 'custom' */
   cellAspectCustom: number
+  /**
+   * 'contain' = the whole wall is visible (a locked cell shape can leave bands).
+   * 'cover' = cells keep their exact shape AND gap, and enough extra rows/columns are added that
+   * the wall covers the comp — the outer screens are simply cut off by the frame.
+   */
+  wallFit: WallFit
 
   // ---- sources / screens ----
   assign: Assign

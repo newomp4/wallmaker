@@ -69,6 +69,22 @@ const ROUNDS = {
     // the runner swaps one video for a freshly created solid-color comp (tests comps as sources)
     compSource: { name: 'WM comp source', hex: '2ECC71' },
   },
+  G: {
+    // 'cover': 9:16 cells keep their exact shape and the outer screens run off the comp edges
+    cfg: {
+      videos: clips(8),
+      compName: 'Wallmaker test G',
+      compW: 1920, compH: 1080, fps: 30, durationSec: 8,
+      gridMode: 'manual', rows: 3, cols: 9, gap: 8, margin: 0,
+      cellAspect: 'tall', wallFit: 'cover',
+      fill: 'cover', cornerRadius: 0, assign: 'shuffle',
+      randomStart: true, loop: true, muteAudio: true,
+      background: 'solid', bgColor: '#0a0a0c',
+      animate: false, reveal: 'random', revealStart: 0, revealDuration: 0,
+      screenAnim: 'cut', screenAnimFrames: 1, jitter: 0, deadPct: 0, seed: 4,
+    },
+    times: [0.3, 3.0, 6.5],
+  },
   F: {
     // THE use case: aspect-locked identical cells, one source centered, zoom out then back in
     cfg: {
@@ -96,7 +112,7 @@ if (unknown.length) {
   console.error(`Unknown round(s): ${unknown.join(', ')} — valid: ${Object.keys(ROUNDS).join(', ')} (round C lives in run-panel.mjs, E in run-rebuild.mjs)`)
   process.exit(1)
 }
-const runs = argRounds.length ? argRounds : ['A', 'B', 'D', 'F']
+const runs = argRounds.length ? argRounds : ['A', 'B', 'D', 'F', 'G']
 
 for (const key of runs) {
   const round = ROUNDS[key]

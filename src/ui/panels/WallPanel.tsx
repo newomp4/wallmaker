@@ -1,7 +1,7 @@
 import type { Config, CellAspect } from '../../core/types'
 import { COMP_PRESETS } from '../../core/defaults'
 import { PRESETS } from '../../core/presets'
-import { gridFor, bandsFor, fillGrid } from '../../core/grid'
+import { gridFor, bandsFor, fillGrid, offscreenCount } from '../../core/grid'
 import { ColorInput, Field, NumberInput, Row, Section, Segmented, Select, Slider, TextInput, Toggle } from '../controls'
 
 /** Does a preset describe the layout the config is already in? (so the chip can show as active) */
@@ -13,6 +13,7 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
   const grid = gridFor(cfg)
   const bands = bandsFor(cfg, grid)
   const flush = bands.x <= 1 && bands.y <= 1
+  const cut = offscreenCount(cfg, grid)
   return (
     <>
       <Section title="Arrangement">
@@ -54,15 +55,27 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
           />
         </Field>
         {cfg.cellAspect === 'custom' && <NumberInput label="Width ÷ height" value={cfg.cellAspectCustom} min={0.1} max={10} step={0.01} onChange={(v) => patch({ cellAspectCustom: v })} />}
+        {cfg.cellAspect !== 'fill' && (
+          <Field label="Wall">
+            <Segmented
+              value={cfg.wallFit}
+              options={[
+                { value: 'contain', label: 'Inside', title: 'The whole wall stays in frame — a locked cell shape can leave bands' },
+                { value: 'cover', label: 'Cover', title: 'Keep the cell shape and gap; add screens until the wall covers the comp, letting the outer ones run off the edges' },
+              ]}
+              onChange={(v) => patch({ wallFit: v })}
+            />
+          </Field>
+        )}
         <div className="notice">
           <span>
             {flush
-              ? `Flush · cells ${(grid.cellW / grid.cellH).toFixed(2)}:1`
+              ? `Flush · cells ${(grid.cellW / grid.cellH).toFixed(2)}:1${cut > 0 ? ` · ${cut} off frame` : ''}`
               : `${bands.y > 1 ? `${bands.y} px top & bottom` : ''}${bands.x > 1 && bands.y > 1 ? ' · ' : ''}${bands.x > 1 ? `${bands.x} px left & right` : ''}`}
           </span>
           {!flush && (
             <button type="button" className="btn" title="Pick the rows, columns and gap that reach the comp edges with cells exactly this shape" onClick={() => patch(fillGrid(cfg))}>
-              Fill comp
+              Fit exactly
             </button>
           )}
         </div>

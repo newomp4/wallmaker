@@ -48,7 +48,7 @@ export function QuickBar({ cfg, patch }: { cfg: Config; patch: (p: Partial<Confi
       )}
       {(bands.x > 1 || bands.y > 1) && (
         <button type="button" className="qb-chip" title="Pick the rows, columns and gap that reach the comp edges with cells exactly this shape" onClick={() => patch(fillGrid(cfg))}>
-          Fill comp
+          Fit exactly
         </button>
       )}
       <button type="button" className="qb-chip" title="Reroll the seed — new random order, dead screens and start offsets" onClick={() => patch({ seed: Math.floor(Math.random() * 100000) })}>

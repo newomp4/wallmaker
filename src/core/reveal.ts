@@ -5,7 +5,7 @@
  * same numbers into expressions and keyframes, so what you see in the panel is what After Effects does.
  */
 import type { Config, GridSpec, ScreenSpec } from './types'
-import { gridFor } from './grid'
+import { gridFor, cellOnscreen } from './grid'
 import { mulberry32, shuffled } from './rng'
 
 /** 0..1 "how early does this screen turn on" before jitter/normalization, per reveal mode. */
@@ -83,12 +83,20 @@ export function planScreens(cfg: Config, grid?: GridSpec): ScreenSpec[] {
   const np = pool.length
   let vids: number[]
   if (cfg.assign === 'shuffle') {
-    // whole rounds of the pool, then a RANDOM pick of sources for the cells left over -- so the
-    // duplicates that fill a grid bigger than the source list aren't always the first few files
-    const rep: number[] = []
-    while (rep.length + np <= n) for (let v = 0; v < np; v++) rep.push(pool[v])
-    const extra = shuffled(pool.slice(), rngAssign).slice(0, n - rep.length)
-    vids = shuffled(rep.concat(extra), rngAssign)
+    // Whole rounds of the pool (so every source appears an equal number of times, +/-1), dealt onto
+    // the cells that are actually IN FRAME first. When the wall bleeds off the comp that means you
+    // still see every clip at least once and the cut-off cells are the ones holding the duplicates.
+    const onscreen: number[] = []
+    const offscreen: number[] = []
+    for (let i = 0; i < n; i++) (cellOnscreen(slots[i].row, slots[i].col, cfg, g) ? onscreen : offscreen).push(i)
+    const order = shuffled(onscreen, rngAssign).concat(shuffled(offscreen, rngAssign))
+    const seq: number[] = []
+    while (seq.length < n) {
+      const round = shuffled(pool.slice(), rngAssign)
+      for (let v = 0; v < round.length && seq.length < n; v++) seq.push(round[v])
+    }
+    vids = new Array<number>(n)
+    for (let k = 0; k < n; k++) vids[order[k]] = seq[k]
   } else if (cfg.assign === 'random') {
     vids = Array.from({ length: n }, () => pool[Math.floor(rngAssign() * np)])
   } else {
@@ -104,9 +112,30 @@ export function planScreens(cfg: Config, grid?: GridSpec): ScreenSpec[] {
   const th = new Array<number>(n)
   for (let r = 0; r < n; r++) th[ranked[r].i] = cfg.reveal === 'none' ? 0 : ((r + 0.5) / n) * 100
 
+  // Start offsets, stratified PER SOURCE: the screens showing a given clip are spread evenly
+  // across it (with jitter inside each slice) instead of drawing independently, where two copies
+  // could land on the same frame and read as a duplicate.
+  const offsets = new Array<number>(n).fill(0)
+  if (cfg.randomStart) {
+    const bySource = new Map<number, number[]>()
+    for (let i = 0; i < n; i++) {
+      if (i === featuredSlot) continue // the centered screen always plays from its start
+      const list = bySource.get(vids[i])
+      if (list) list.push(i)
+      else bySource.set(vids[i], [i])
+    }
+    const keys = Array.from(bySource.keys()).sort((a, b) => a - b)
+    for (const v of keys) {
+      const idxs = shuffled(bySource.get(v)!, rngOffset)
+      for (let k = 0; k < idxs.length; k++) {
+        offsets[idxs[k]] = Math.round(((k + 0.15 + 0.7 * rngOffset()) / idxs.length) * 0.95 * 10000) / 10000
+      }
+    }
+  }
+
   return slots.map((slot, i) => {
     const dead = Math.round(rngDead() * 10000) / 10000
-    const offset = Math.round((cfg.randomStart ? rngOffset() * 0.95 : 0) * 10000) / 10000
+    const offset = offsets[i]
     if (i === featuredSlot) {
       // pinned: plays the chosen source from its start, on from the first moment, can't be dead
       return { i, row: slot.row, col: slot.col, v: featuredIdx, th: 0, dead: 1, offset: 0, featured: true }

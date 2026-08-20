@@ -18,6 +18,7 @@ export const DEFAULT_CONFIG: Config = {
   cornerRadius: 0,
   cellAspect: 'fill',
   cellAspectCustom: 1.7778,
+  wallFit: 'contain',
 
   assign: 'shuffle',
   randomStart: true,

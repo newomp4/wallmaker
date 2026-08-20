@@ -31,6 +31,7 @@ const ENUMS: Partial<Record<keyof Config, readonly string[]>> = {
   reveal: ['none', 'random', 'rows', 'cols', 'sequence', 'snake', 'center', 'spiral', 'edges', 'diagonal'],
   screenAnim: ['cut', 'fade', 'flicker', 'pop'],
   cellAspect: ['fill', 'wide', 'tv', 'square', 'tall', 'custom'],
+  wallFit: ['contain', 'cover'],
   intro: ['none', 'zoomOut'],
   outro: ['none', 'zoomIn'],
 }

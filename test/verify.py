@@ -73,6 +73,24 @@ if 'layers' in result:
         fail(f'{len(lays)} layers in the comp, expected exactly the rig + screens + background')
     print(f'  structure: {len(lays)} layers match the plan — ok')
 
+# ---------- 'cover': the wall runs past the comp edges, and every source is still seen ----------
+def onscreen(sc):
+    cx = (sc['col'] - (g['cols'] - 1) / 2) * (g['cellW'] + g['gap'])
+    cy = (sc['row'] - (g['rows'] - 1) / 2) * (g['cellH'] + g['gap'])
+    return abs(cx) + g['cellW'] / 2 <= W / 2 + 0.5 and abs(cy) + g['cellH'] / 2 <= H / 2 + 0.5
+
+VISIBLE = [sc for sc in wall['screens'] if onscreen(sc)]
+if config.get('wallFit') == 'cover' and config.get('cellAspect', 'fill') != 'fill':
+    if g['wallW'] < W - 0.5 or g['wallH'] < H - 0.5:
+        fail(f"cover: wall {g['wallW']}x{g['wallH']} does not reach past the comp {W}x{H}")
+    if len(VISIBLE) >= n:
+        fail('cover: no screen is cut off by the frame — nothing was added')
+    seen = {sc['v'] for sc in VISIBLE}
+    if len(seen) != len(wall['videos']):
+        fail(f'cover: only {len(seen)}/{len(wall["videos"])} sources appear in frame — duplicates took visible cells')
+    else:
+        print(f"  cover: wall {round(g['wallW'])}x{round(g['wallH'])} over a {W}x{H} comp, {n - len(VISIBLE)} screens cut off, all {len(seen)} sources in frame — ok")
+
 # every cell holds exactly one screen, all the same size
 if n != g['rows'] * g['cols']:
     fail(f"{n} screens for a {g['rows']}x{g['cols']} grid — every cell must hold exactly one")
@@ -225,7 +243,7 @@ for tkey, probe in result['probes'].items():
         if any(abs(gc - b) > 26 for gc, b in zip(got, bg)):
             fail(f'snap t={t}: margin band rgb {got}, expected bg {bg}')
     checked = 0
-    for s in wall['screens']:
+    for s in VISIBLE:
         cx = W / 2 + (s['col'] - (g['cols'] - 1) / 2) * (g['cellW'] + g['gap'])
         cy = H / 2 + (s['row'] - (g['rows'] - 1) / 2) * (g['cellH'] + g['gap'])
         mean = ImageStat.Stat(img.crop((int(cx) - 3, int(cy) - 3, int(cx) + 4, int(cy) + 4))).mean
@@ -244,13 +262,13 @@ for tkey, probe in result['probes'].items():
             if sum(mean) / 3 > 82:
                 fail(f'snap t={t} screen {s["i"]}: off but bright (mean {tuple(round(m) for m in mean)}, bg {bg})')
             checked += 1
-    if checked < max(1, n * 0.4):
-        fail(f'snap t={t}: only {checked}/{n} cells were checkable — the pixel verification has gone vacuous')
+    if checked < max(1, len(VISIBLE) * 0.4):
+        fail(f'snap t={t}: only {checked}/{len(VISIBLE)} in-frame cells were checkable — the pixel verification has gone vacuous')
     # big rounded corners must actually cut the video: the cell's corner shows background, not clip
     if wall['cornerRadius'] >= 20:
         pos_by_idx = {row['idx']: row['pos'] for row in probe}
         corners = 0
-        for s in wall['screens']:
+        for s in VISIBLE:
             name = wall['videos'][s['v']]['name']
             pos = pos_by_idx[s['i']]
             if op_by_idx[s['i']] < 99.5 or name not in colors:
