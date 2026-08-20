@@ -74,13 +74,24 @@ function loadThumb(path: string): Promise<void> {
   })
 }
 
-function hashHue(s: string): number {
+function hashOf(s: string): number {
   let h = 2166136261
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i)
     h = Math.imul(h, 16777619)
   }
-  return (h >>> 0) % 360
+  return h >>> 0
+}
+
+/**
+ * Placeholder fill for a screen with no thumbnail (a comp, or a clip still loading): a flat grey
+ * per source so different sources stay distinguishable, checkerboarded a few points lighter/darker
+ * by cell so neighbouring screens always read as separate tiles even when they share a source.
+ */
+function placeholderGrey(name: string, row: number, col: number, isComp: boolean): string {
+  const base = 18 + (hashOf(name) % 9) * 4 // 18 .. 50
+  const l = base + ((row + col) % 2 === 0 ? 6 : -6) - (isComp ? 4 : 0)
+  return `hsl(0 0% ${Math.max(7, Math.min(60, l)).toFixed(1)}%)`
 }
 
 export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partial<Config>) => void }) {
@@ -189,14 +200,10 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
         }
         ctx.drawImage(thumb, px - dw / 2, py - dh / 2, dw, dh)
       } else {
-        const hue = hashHue(srcName)
-        const g = ctx.createLinearGradient(px - w / 2, py - h / 2, px + w / 2, py + h / 2)
-        g.addColorStop(0, `hsl(${hue} ${isComp ? 30 : 42}% ${isComp ? 30 : 38}%)`)
-        g.addColorStop(1, `hsl(${(hue + 40) % 360} ${isComp ? 32 : 45}% ${isComp ? 18 : 22}%)`)
-        ctx.fillStyle = g
+        ctx.fillStyle = placeholderGrey(srcName, s.row, s.col, isComp)
         ctx.fillRect(px - w / 2, py - h / 2, w, h)
         if (isComp && w >= 46 && h >= 24) {
-          ctx.fillStyle = 'rgba(255,255,255,.7)'
+          ctx.fillStyle = 'rgba(255,255,255,.6)'
           ctx.font = `${Math.max(8, Math.round(Math.min(h * 0.16, 13)))}px -apple-system, sans-serif`
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
