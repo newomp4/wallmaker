@@ -26,8 +26,8 @@ const CFG = {
   compW: 1280, compH: 720, fps: 30, durationSec: 8,
   gridMode: 'auto', gap: 10, margin: 24,
   fill: 'cover', cornerRadius: 4, assign: 'sequential', animate: true,
-  randomStart: true, loop: true, muteAudio: true, labels: false,
-  background: 'dark', bgColor: '#0c0c10',
+  randomStart: true, loop: true, muteAudio: true,
+  background: 'solid', bgColor: '#0c0c10',
   reveal: 'rows', revealStart: 0.3, revealDuration: 4,
   screenAnim: 'pop', screenAnimFrames: 8, jitter: 0, deadPct: 0, seed: 5,
 }
@@ -85,11 +85,14 @@ const finish = await evalJS('window.__wallmaker.build()', { awaitPromise: true, 
 console.log(`built in ${((Date.now() - t0) / 1000).toFixed(1)} s:`, JSON.stringify(finish))
 
 const probes = {}
+const cams = {}
+const layers = await evalJS(`window.__wallmaker.callHost('layers', ${JSON.stringify({ compName: CFG.compName })})`, { awaitPromise: true, timeoutMs: 120000 })
 for (const t of TIMES) {
   probes[String(t)] = await evalJS(`window.__wallmaker.callHost('probe', ${JSON.stringify({ compName: CFG.compName, time: t })})`, { awaitPromise: true, timeoutMs: 120000 })
+  cams[String(t)] = await evalJS(`window.__wallmaker.callHost('camState', ${JSON.stringify({ compName: CFG.compName, time: t })})`, { awaitPromise: true, timeoutMs: 120000 })
   await evalJS(`window.__wallmaker.callHost('snapshot', ${JSON.stringify({ compName: CFG.compName, time: t, path: `${dir}/snap-${t}.png` })})`, { awaitPromise: true, timeoutMs: 120000 })
 }
-writeFileSync(join(dir, 'result.json'), JSON.stringify({ ok: true, finish, probes }))
+writeFileSync(join(dir, 'result.json'), JSON.stringify({ ok: true, finish, probes, cams, layers }))
 for (const t of TIMES) {
   const p = join(dir, `snap-${t}.png`)
   let last = -1

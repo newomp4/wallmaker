@@ -23,12 +23,8 @@ export const DEFAULT_CONFIG: Config = {
   randomStart: true,
   loop: true,
   muteAudio: true,
-  labels: false,
-  labelPrefix: 'CAM',
 
-  heroes: 0,
   featured: -1,
-  featuredSpan: 2,
 
   intro: 'none',
   introHold: 1,
@@ -37,30 +33,18 @@ export const DEFAULT_CONFIG: Config = {
   outroHold: 0.5,
   outroDur: 2,
 
-  background: 'dark',
+  background: 'solid',
   bgColor: '#0a0a0c',
-  staticBrightness: 14,
-  borders: false,
-  borderWidth: 2,
-  borderColor: '#2a2a30',
-  scanlines: false,
-  scanStrength: 25,
 
   animate: false,
   reveal: 'random',
   revealStart: 0.5,
   revealDuration: 6,
-  screenAnim: 'flicker',
+  screenAnim: 'fade',
   screenAnimFrames: 8,
   jitter: 0.15,
   deadPct: 0,
-  dropouts: 0,
   seed: 7,
-
-  focus: false,
-  focusRadius: 400,
-  focusZoom: 135,
-  focusDim: 30,
 }
 
 export const COMP_PRESETS: { label: string; w: number; h: number }[] = [

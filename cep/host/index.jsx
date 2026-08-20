@@ -62,8 +62,9 @@ $.global.WALLMAKER_JSON = (function () {
 $.global.WALLMAKER = (function () {
   var VERSION = '1.0.0';
   var TAG = 'wallmaker';
-  var CTL = 'Wallmaker Controls'; // the null everything is parented to; its sliders drive the expressions
-  var FOCUS = 'Wallmaker Focus'; // optional spotlight null: nearby screens zoom, far ones dim
+  var CTL = 'Wallmaker Controls'; // the wall null: every screen is parented to it, its sliders drive the expressions
+  var CAM = 'Wallmaker Camera'; // the wall null's parent: one keyframed 'Zoom to screen (%)' slider drives the move
+  var REC_V = 2; // rebuild-record version (v1 = camera keyframes lived on the Controls null)
   var J = WALLMAKER_JSON;
   var st = null; // current build state
 
@@ -134,6 +135,17 @@ $.global.WALLMAKER = (function () {
     );
   }
 
+  /** Accessor for the camera null's OWN effects (same shape as C, but reads this layer). */
+  function camLib() {
+    return (
+      'function E(nm, df) {\n' +
+      '  var v = df;\n' +
+      '  try { v = thisLayer.effect(nm)(1).value; } catch (e) {}\n' +
+      '  return v;\n' +
+      '}\n'
+    );
+  }
+
   /** Shared turn-on timing: when does this screen come alive, and how far into its animation are we. */
   function turnOnSnippet(th) {
     var r = st.data.reveal;
@@ -166,51 +178,16 @@ $.global.WALLMAKER = (function () {
         turnOnSnippet(screen.th) +
         'if (dt < 0) { e = 0; } else { var c1 = 1.70158; var c3 = c1 + 1; e = 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); if (e < 0) e = 0; }\n';
     }
-    if (st.data.focus) {
-      body +=
-        'var fz = 1;\n' +
-        'try {\n' +
-        '  var FL = thisComp.layer(' + q(FOCUS) + ');\n' +
-        '  var FR = Math.max(1, C(' + q('Focus radius (px)') + ', ' + num(st.data.focus.radius, 400) + '));\n' +
-        '  var FZ = C(' + q('Focus zoom (%)') + ', ' + num(st.data.focus.zoom, 135) + ') / 100;\n' +
-        '  var dv = transform.position - FL.transform.position;\n' +
-        '  var dd = Math.sqrt(dv[0] * dv[0] + dv[1] * dv[1]);\n' +
-        '  var fk = Math.max(0, 1 - dd / FR);\n' +
-        '  fk = fk * fk * (3 - 2 * fk);\n' +
-        '  fz = 1 + (FZ - 1) * fk;\n' +
-        '} catch (eF) {}\n';
-      body += '[' + bsx + ' * m * e * fz, ' + bsy + ' * m * e * fz]';
-    } else {
-      body += '[' + bsx + ' * m * e, ' + bsy + ' * m * e]';
-    }
+    body += '[' + bsx + ' * m * e, ' + bsy + ' * m * e]';
     return body;
   }
 
   function opacityExpr(screen) {
     var r = st.data.reveal;
     if (screen.featured) {
-      // pinned means PINNED: only the master opacity slider (and the focus dim) applies
-      var fb = exprLib() + 'var OP = C(' + q('Screens opacity (%)') + ', 100);\nvar on = 1;\n';
-      if (st.data.focus) {
-        fb +=
-          'var fd = 1;\n' +
-          'try {\n' +
-          '  var FL = thisComp.layer(' + q(FOCUS) + ');\n' +
-          '  var FR = Math.max(1, C(' + q('Focus radius (px)') + ', ' + num(st.data.focus.radius, 400) + '));\n' +
-          '  var DM = C(' + q('Focus dim (%)') + ', ' + num(st.data.focus.dim, 0) + ') / 100;\n' +
-          '  var dv = transform.position - FL.transform.position;\n' +
-          '  var dd = Math.sqrt(dv[0] * dv[0] + dv[1] * dv[1]);\n' +
-          '  var fk = Math.max(0, 1 - dd / FR);\n' +
-          '  fk = fk * fk * (3 - 2 * fk);\n' +
-          '  fd = 1 - Math.min(1, Math.max(0, DM)) * (1 - fk);\n' +
-          '} catch (eF) {}\n' +
-          'on * OP * fd';
-      } else {
-        fb += 'on * OP';
-      }
-      return fb;
+      // the centered screen means PINNED: only the master opacity slider applies
+      return exprLib() + 'C(' + q('Screens opacity (%)') + ', 100)';
     }
-    var style = r.style;
     var body =
       exprLib() +
       turnOnSnippet(screen.th) +
@@ -218,62 +195,11 @@ $.global.WALLMAKER = (function () {
       'var dead = (' + screen.dead + ' * 100 < C(' + q('Dead screens (%)') + ', ' + num(r.deadPct, 0) + '));\n' +
       'var on = 0;\n' +
       'if (!dead && dt >= 0) {\n';
-    if (style === 'fade') {
-      body += '  on = p;\n';
-    } else if (style === 'flicker') {
-      body +=
-        '  if (p >= 1) { on = 1; }\n' +
-        '  else {\n' +
-        '    var fr = Math.floor(dt / thisComp.frameDuration);\n' +
-        '    seedRandom(' + screen.i + ' * 971 + fr, true);\n' +
-        '    var r1 = random();\n' +
-        '    var r2 = random();\n' +
-        '    on = (r1 < 0.25 + 0.75 * p * p) ? (0.55 + 0.45 * r2) : 0;\n' +
-        '  }\n';
-    } else {
-      body += '  on = 1;\n'; // cut / pop (pop animates on scale)
-    }
+    if (r.style === 'fade') body += '  on = p;\n';
+    else body += '  on = 1;\n'; // cut / pop (pop animates on scale)
     body += '}\n';
-    body +=
-      'if (on >= 1) {\n' +
-      '  var DR = C(' + q('Dropouts (%)') + ', ' + num(r.dropouts, 0) + ');\n' +
-      '  if (DR > 0) {\n' +
-      '    var blk = Math.floor(time);\n' +
-      '    seedRandom(' + screen.i + ' * 577 + blk * 131, true);\n' +
-      '    if (random() < DR / 100 * 0.6) {\n' +
-      '      var bs = blk + random() * 0.8;\n' +
-      '      var bl = 0.06 + random() * 0.18;\n' +
-      '      if (time >= bs && time <= bs + bl) on = 0;\n' +
-      '    }\n' +
-      '  }\n' +
-      '}\n';
-    if (st.data.focus) {
-      body +=
-        'var fd = 1;\n' +
-        'try {\n' +
-        '  var FL = thisComp.layer(' + q(FOCUS) + ');\n' +
-        '  var FR = Math.max(1, C(' + q('Focus radius (px)') + ', ' + num(st.data.focus.radius, 400) + '));\n' +
-        '  var DM = C(' + q('Focus dim (%)') + ', ' + num(st.data.focus.dim, 0) + ') / 100;\n' +
-        '  var dv = transform.position - FL.transform.position;\n' +
-        '  var dd = Math.sqrt(dv[0] * dv[0] + dv[1] * dv[1]);\n' +
-        '  var fk = Math.max(0, 1 - dd / FR);\n' +
-        '  fk = fk * fk * (3 - 2 * fk);\n' +
-        '  fd = 1 - Math.min(1, Math.max(0, DM)) * (1 - fk);\n' +
-        '} catch (eF) {}\n' +
-        'on * OP * fd';
-    } else {
-      body += 'on * OP';
-    }
+    body += 'on * OP';
     return body;
-  }
-
-  function labelOpacityExpr() {
-    return (
-      exprLib() +
-      'var po = 0;\n' +
-      'try { po = thisLayer.parent.transform.opacity; } catch (e) {}\n' +
-      'po * C(' + q('Label opacity (%)') + ', 100) / 100'
-    );
   }
 
   // ---------------------------------------------------------------- masks & shapes
@@ -321,17 +247,17 @@ $.global.WALLMAKER = (function () {
     return mask;
   }
 
-  // ---------------------------------------------------------------- controls null
+  // ---------------------------------------------------------------- the rig (two nulls)
 
   /**
-   * The rebuild contract for the Controls null: a JSON record after '|' in its comment remembers
-   * every value WE last wrote. On rebuild, a slider the user never touched (no keyframes, value
-   * still equals our record) FOLLOWS the panel; a slider the user changed or keyframed is theirs
-   * and is left alone. Disabled features get their sliders removed so stale values can't leak
-   * into expressions (e.g. dropouts turned off but the old slider still reading 20).
+   * THE REBUILD CONTRACT. Both rig nulls carry a JSON record after '|' in their comment that
+   * remembers every value WE last wrote (sliders, point controls, and the camera's keyframes).
+   * On a rebuild: anything the user never touched (no keyframes, value still equal to our record)
+   * FOLLOWS the panel; anything they changed, keyframed or re-eased is theirs and is left alone.
+   * Switched-off features get their controls removed so stale values can't leak into expressions.
    */
-  function ctlRecord(ctl) {
-    var c = String(ctl.comment || '');
+  function recOf(layer) {
+    var c = String(layer.comment || '');
     var i = c.indexOf('|');
     if (i < 0) return {};
     var rec = null;
@@ -340,23 +266,11 @@ $.global.WALLMAKER = (function () {
     } catch (e) {}
     return rec || {};
   }
-  function setCtlRecord(ctl, rec) {
-    var c = String(ctl.comment || '');
+  function setRec(layer, rec) {
+    var c = String(layer.comment || '');
     var i = c.indexOf('|');
     var base = i < 0 ? c : c.substring(0, i);
-    ctl.comment = base + '|' + J.stringify(rec);
-  }
-  function hasCamMark(ctl) {
-    var c = String(ctl.comment || '');
-    var i = c.indexOf('|');
-    return (i < 0 ? c : c.substring(0, i)).indexOf(' cam') >= 0;
-  }
-  function setCamMark(ctl, on) {
-    var c = String(ctl.comment || '');
-    var i = c.indexOf('|');
-    var base = (i < 0 ? c : c.substring(0, i)).replace(' cam', '');
-    if (on) base = base + ' cam';
-    ctl.comment = base + (i < 0 ? '' : c.substring(i));
+    layer.comment = base + '|' + J.stringify(rec);
   }
 
   function addSlider(fx, name, val, rec) {
@@ -381,6 +295,30 @@ $.global.WALLMAKER = (function () {
     return e;
   }
 
+  /** Same contract, for a 2D Point Control (the camera's manual pan). */
+  function addPoint(fx, name, val, rec) {
+    for (var i = 1; i <= fx.numProperties; i++) {
+      if (fx.property(i).name === name) {
+        var prop = fx.property(i).property(1);
+        var prev = rec[name];
+        var untouched =
+          prop.numKeys === 0 && prev instanceof Array && Math.abs(prop.value[0] - prev[0]) < 0.005 && Math.abs(prop.value[1] - prev[1]) < 0.005;
+        if (untouched) {
+          try {
+            prop.setValue(val);
+            rec[name] = [val[0], val[1]];
+          } catch (eU2) {}
+        }
+        return fx.property(i);
+      }
+    }
+    var e = fx.addProperty('ADBE Point Control');
+    e.name = name;
+    e.property(1).setValue(val);
+    rec[name] = [val[0], val[1]];
+    return e;
+  }
+
   function removeSlider(fx, name, rec) {
     for (var i = fx.numProperties; i >= 1; i--) {
       if (fx.property(i).name === name) {
@@ -392,44 +330,200 @@ $.global.WALLMAKER = (function () {
     delete rec[name];
   }
 
-  function ensureControls(comp) {
-    var d = st.data;
-    var ctl = null;
+  function findTagged(comp, suffix) {
     for (var i = 1; i <= comp.numLayers; i++) {
       var l = comp.layer(i);
-      if (isOurs(l) && l.comment.indexOf(TAG + '-controls') === 0) {
-        ctl = l;
-        break;
-      }
+      if (isOurs(l) && l.comment.indexOf(TAG + '-' + suffix) === 0) return l;
     }
+    return null;
+  }
+
+  /**
+   * The camera null: the wall's parent. Its Position and Scale are expressions reading its own
+   * controls, so the WHOLE move is one keyframable number ('Zoom to screen (%)': 0 = the whole
+   * wall, 100 = the target screen filling the comp). Retime it, re-ease it in the graph editor or
+   * replace the keys entirely -- the geometry follows, and a rebuild will not touch your keys.
+   */
+  function ensureCamera(comp) {
+    var d = st.data;
+    var cam = findTagged(comp, 'camera');
+    if (!cam) {
+      cam = comp.layers.addNull(comp.duration);
+      cam.name = CAM;
+      cam.comment = TAG + '-camera';
+      tf(cam).property('ADBE Anchor Point').setValue([0, 0]);
+    }
+    cam.enabled = false;
+    cam.shy = false;
+    try {
+      cam.startTime = 0;
+      cam.inPoint = 0;
+      cam.outPoint = comp.duration;
+    } catch (eSpan) {}
+    var rec = recOf(cam);
+    st.camRec = rec;
+    var plan = d.camera;
+    var fx = cam.property('ADBE Effect Parade');
+    addSlider(fx, 'Zoom to screen (%)', 0, rec);
+    addSlider(fx, 'Target column', plan ? plan.cell[0] : 0, rec);
+    addSlider(fx, 'Target row', plan ? plan.cell[1] : 0, rec);
+    addSlider(fx, 'Extra scale (%)', 100, rec);
+    addPoint(fx, 'Pan (px)', [0, 0], rec);
+    // the two expressions. They read live values, so changing Gap or panning stays correct.
+    var W = d.frame.w;
+    var H = d.frame.h;
+    var g = d.grid;
+    var full = plan ? plan.scale : 100;
+    var lib = exprLib() + camLib();
+    var common =
+      'var Z = E(' + q('Zoom to screen (%)') + ', 0) / 100;\n' +
+      'var X = E(' + q('Extra scale (%)') + ', 100) / 100;\n';
+    var posBody =
+      lib +
+      common +
+      'var gap = C(' + q('Gap (px)') + ', ' + num(g.gap, 0) + ');\n' +
+      'var cc = E(' + q('Target column') + ', ' + (plan ? plan.cell[0] : 0) + ');\n' +
+      'var cr = E(' + q('Target row') + ', ' + (plan ? plan.cell[1] : 0) + ');\n' +
+      'var px = (cc - ' + ((g.cols - 1) / 2) + ') * (' + g.cellW + ' + gap);\n' +
+      'var py = (cr - ' + ((g.rows - 1) / 2) + ') * (' + g.cellH + ' + gap);\n' +
+      'var k = ' + full + ' / 100;\n' +
+      'var pan = E(' + q('Pan (px)') + ', [0, 0]);\n' +
+      '[' + W / 2 + ' + pan[0] - X * Z * k * px, ' + H / 2 + ' + pan[1] - X * Z * k * py]';
+    var sclBody = lib + common + 'var s = (100 + Z * (' + full + ' - 100)) * X;\n[s, s]';
+    var pp = tf(cam).property('ADBE Position');
+    var sp = tf(cam).property('ADBE Scale');
+    try {
+      if (pp.numKeys === 0) pp.setValue([W / 2, H / 2]);
+      pp.expression = posBody;
+      if (sp.numKeys === 0) sp.setValue([100, 100]);
+      sp.expression = sclBody;
+    } catch (eX) {}
+    return cam;
+  }
+
+  /**
+   * Write the intro / outro move as keyframes on 'Zoom to screen (%)'. The record remembers the
+   * exact keys (time, value AND easing) we wrote: if they still look like ours we replace them,
+   * and if you have touched anything about them they are yours and we leave them completely alone.
+   */
+  function applyCamera(cam) {
+    var d = st.data;
+    var plan = d.camera;
+    var rec = st.camRec || {};
+    var fx = cam.property('ADBE Effect Parade');
+    var zp = null;
+    for (var i = 1; i <= fx.numProperties; i++) if (fx.property(i).name === 'Zoom to screen (%)') zp = fx.property(i).property(1);
+    if (!zp) return;
+    if (!keysAreOurs(zp, rec.__keys)) {
+      st.keptCamKeys = true;
+      return; // hand-edited: not ours to rewrite
+    }
+    try {
+      while (zp.numKeys > 0) zp.removeKey(1);
+    } catch (eC) {}
+    var keys = [];
+    if (plan && plan.intro) {
+      if (plan.intro.hold > 0) keys.push([0, 100]);
+      keys.push([plan.intro.hold, 100]);
+      keys.push([plan.intro.end, 0]);
+    }
+    if (plan && plan.outro) {
+      keys.push([plan.outro.start, 0]);
+      keys.push([plan.outro.end, 100]);
+    }
+    for (var k = 0; k < keys.length; k++) {
+      try {
+        zp.setValueAtTime(keys[k][0], keys[k][1]);
+      } catch (eK) {}
+    }
+    var ease = new KeyframeEase(0, EASE_INFLUENCE);
+    for (var m = 1; m <= zp.numKeys; m++) {
+      try {
+        zp.setInterpolationTypeAtKey(m, KeyframeInterpolationType.BEZIER, KeyframeInterpolationType.BEZIER);
+        zp.setTemporalEaseAtKey(m, [ease], [ease]);
+      } catch (eE) {}
+    }
+    rec.__keys = keys;
+    if (zp.numKeys === 0) delete rec.__keys;
+  }
+
+  var EASE_INFLUENCE = 75;
+
+  /** Do this property's keyframes still match, exactly, what we last wrote (times, values, easing)? */
+  function keysAreOurs(prop, want) {
+    if (!want || !want.length) return prop.numKeys === 0;
+    if (prop.numKeys !== want.length) return false;
+    for (var i = 1; i <= prop.numKeys; i++) {
+      if (Math.abs(prop.keyTime(i) - want[i - 1][0]) > 0.002) return false;
+      if (Math.abs(prop.keyValue(i) - want[i - 1][1]) > 0.01) return false;
+      try {
+        var ein = prop.keyInTemporalEase(i)[0];
+        var eout = prop.keyOutTemporalEase(i)[0];
+        if (Math.abs(ein.influence - EASE_INFLUENCE) > 1 || Math.abs(eout.influence - EASE_INFLUENCE) > 1) return false;
+        if (Math.abs(ein.speed) > 0.01 || Math.abs(eout.speed) > 0.01) return false;
+      } catch (eT) {}
+    }
+    return true;
+  }
+
+  /** The wall null: every screen hangs off it, and it hangs off the camera. Sliders drive the expressions. */
+  function ensureControls(comp) {
+    var d = st.data;
+    var ctl = findTagged(comp, 'controls');
     if (!ctl) {
       ctl = comp.layers.addNull(comp.duration);
       ctl.name = CTL;
       ctl.comment = TAG + '-controls';
       tf(ctl).property('ADBE Anchor Point').setValue([0, 0]);
-      tf(ctl).property('ADBE Position').setValue([d.frame.w / 2, d.frame.h / 2]);
     }
-    ctl.enabled = false; // nulls are invisible anyway; keep the switch off so it never renders
+    ctl.enabled = false;
+    ctl.shy = false;
     try {
       ctl.startTime = 0;
       ctl.inPoint = 0;
       ctl.outPoint = comp.duration; // a kept null must span a comp that grew on rebuild
     } catch (eSpan) {}
-    var rec = ctlRecord(ctl);
+    var rec = recOf(ctl);
     st.ctlRec = rec;
-    // a resized comp on rebuild: re-center the wall -- unless the user moved/keyframed the null
     var posP = tf(ctl).property('ADBE Position');
-    var wantC = [d.frame.w / 2, d.frame.h / 2];
-    var posUntouched = posP.numKeys === 0 && typeof rec.__cx === 'number' && Math.abs(posP.value[0] - rec.__cx) < 0.5 && Math.abs(posP.value[1] - rec.__cy) < 0.5;
-    if (posUntouched && (posP.value[0] !== wantC[0] || posP.value[1] !== wantC[1])) {
+    var sclP = tf(ctl).property('ADBE Scale');
+    var oldRig = num(rec.__v, 1) < 2;
+    // Decide ownership BEFORE parenting: assigning a parent makes AE rewrite the child's local
+    // transform to preserve its world transform, so afterwards these values mean nothing.
+    var offUntouched =
+      posP.numKeys === 0 &&
+      (oldRig || (typeof rec.__cx === 'number' && Math.abs(posP.value[0] - rec.__cx) < 0.5 && Math.abs(posP.value[1] - rec.__cy) < 0.5));
+    var sclUntouched = sclP.numKeys === 0 && (oldRig || Math.abs(sclP.value[0] - 100) < 0.01);
+    if (oldRig) {
+      // built by an older Wallmaker, where the camera keyframed THIS null: those keys were ours,
+      // so clear them -- the camera null owns the move now and the wall sits at its origin.
       try {
-        posP.setValue(wantC);
+        while (posP.numKeys > 0) posP.removeKey(1);
+        while (sclP.numKeys > 0) sclP.removeKey(1);
+      } catch (eOld) {}
+      try {
+        var c0 = String(ctl.comment || '');
+        var bar = c0.indexOf('|');
+        ctl.comment = (bar < 0 ? c0 : c0.substring(0, bar)).replace(' cam', '') + (bar < 0 ? '' : c0.substring(bar));
+      } catch (eCm) {}
+    }
+    try {
+      if (ctl.parent !== st.cam) ctl.parent = st.cam;
+    } catch (eP) {}
+    // ... and write them back AFTER, so AE's parenting compensation cannot survive
+    if (sclUntouched) {
+      try {
+        sclP.setValue([100, 100]);
+      } catch (eS) {}
+    }
+    if (offUntouched) {
+      try {
+        posP.setValue([0, 0]);
       } catch (ePos) {}
+      rec.__cx = 0;
+      rec.__cy = 0;
     }
-    if (posP.numKeys === 0 && (typeof rec.__cx !== 'number' || posUntouched)) {
-      rec.__cx = wantC[0];
-      rec.__cy = wantC[1];
-    }
+    rec.__v = REC_V;
     var fx = ctl.property('ADBE Effect Parade');
     addSlider(fx, 'Reveal start (s)', num(d.reveal.start, 0), rec);
     addSlider(fx, 'Reveal duration (s)', num(d.reveal.duration, 0), rec);
@@ -438,49 +532,16 @@ $.global.WALLMAKER = (function () {
     addSlider(fx, 'Gap (px)', num(d.grid.gap, 0), rec);
     addSlider(fx, 'Screen scale (%)', 100, rec);
     addSlider(fx, 'Screens opacity (%)', 100, rec);
-    if (d.labels) addSlider(fx, 'Label opacity (%)', 100, rec);
-    else removeSlider(fx, 'Label opacity (%)', rec);
-    if (d.bg.mode === 'static') addSlider(fx, 'Static brightness (%)', num(d.bg.staticBrightness, 14), rec);
-    else removeSlider(fx, 'Static brightness (%)', rec);
-    if (d.reveal.dropouts > 0) addSlider(fx, 'Dropouts (%)', num(d.reveal.dropouts, 0), rec);
-    else removeSlider(fx, 'Dropouts (%)', rec);
-    if (d.borders) addSlider(fx, 'Border (px)', num(d.borders.width, 2), rec);
-    else removeSlider(fx, 'Border (px)', rec);
-    if (d.scanlines) addSlider(fx, 'Scanlines (%)', num(d.scanlines.strength, 25), rec);
-    else removeSlider(fx, 'Scanlines (%)', rec);
-    if (d.focus) {
-      addSlider(fx, 'Focus radius (px)', num(d.focus.radius, 400), rec);
-      addSlider(fx, 'Focus zoom (%)', num(d.focus.zoom, 135), rec);
-      addSlider(fx, 'Focus dim (%)', num(d.focus.dim, 0), rec);
-    } else {
-      removeSlider(fx, 'Focus radius (px)', rec);
-      removeSlider(fx, 'Focus zoom (%)', rec);
-      removeSlider(fx, 'Focus dim (%)', rec);
-    }
+    // controls that older builds may have left behind
+    removeSlider(fx, 'Label opacity (%)', rec);
+    removeSlider(fx, 'Static brightness (%)', rec);
+    removeSlider(fx, 'Dropouts (%)', rec);
+    removeSlider(fx, 'Border (px)', rec);
+    removeSlider(fx, 'Scanlines (%)', rec);
+    removeSlider(fx, 'Focus radius (px)', rec);
+    removeSlider(fx, 'Focus zoom (%)', rec);
+    removeSlider(fx, 'Focus dim (%)', rec);
     return ctl;
-  }
-
-  /** The draggable spotlight null (only when the feature is on). Kept across rebuilds like the Controls null. */
-  function ensureFocusNull(comp) {
-    if (!st.data.focus) return null;
-    for (var i = 1; i <= comp.numLayers; i++) {
-      var l = comp.layer(i);
-      if (isOurs(l) && l.comment.indexOf(TAG + '-focus') === 0) {
-        try {
-          l.startTime = 0;
-          l.inPoint = 0;
-          l.outPoint = comp.duration;
-        } catch (eSpan2) {}
-        return l;
-      }
-    }
-    var f = comp.layers.addNull(comp.duration);
-    f.name = FOCUS;
-    f.comment = TAG + '-focus';
-    f.parent = st.ctl;
-    tf(f).property('ADBE Anchor Point').setValue([0, 0]);
-    tf(f).property('ADBE Position').setValue([0, 0]);
-    return f;
   }
 
   // ---------------------------------------------------------------- footage
@@ -557,9 +618,8 @@ $.global.WALLMAKER = (function () {
     var it = rec.item;
     var sw = Math.max(1, it.width);
     var sh = Math.max(1, it.height);
-    var span = Math.max(1, num(s.span, 1));
-    var cw = d.grid.cellW * span + d.grid.gap * (span - 1);
-    var ch = d.grid.cellH * span + d.grid.gap * (span - 1);
+    var cw = d.grid.cellW;
+    var ch = d.grid.cellH;
     var sx, sy;
     if (d.fill === 'stretch') {
       sx = cw / sw;
@@ -623,67 +683,17 @@ $.global.WALLMAKER = (function () {
     addCropMask(layer, x0, y0, x0 + vw, y0 + vh, d.cornerRadius / sx, d.cornerRadius / sy);
     layer.parent = st.ctl;
     tf(layer).property('ADBE Anchor Point').setValue([sw / 2, sh / 2]);
-    var rowF = s.row + (span - 1) / 2;
-    var colF = s.col + (span - 1) / 2;
     var posP = tf(layer).property('ADBE Position');
-    posP.setValue([(colF - (d.grid.cols - 1) / 2) * (d.grid.cellW + d.grid.gap), (rowF - (d.grid.rows - 1) / 2) * (d.grid.cellH + d.grid.gap)]);
-    posP.expression = positionExpr(rowF, colF);
+    posP.setValue([(s.col - (d.grid.cols - 1) / 2) * (d.grid.cellW + d.grid.gap), (s.row - (d.grid.rows - 1) / 2) * (d.grid.cellH + d.grid.gap)]);
+    posP.expression = positionExpr(s.row, s.col);
     var sclP = tf(layer).property('ADBE Scale');
     sclP.setValue([sx * 100, sy * 100]);
     sclP.expression = scaleExpr(sx * 100, sy * 100, s);
     tf(layer).property('ADBE Opacity').expression = opacityExpr(s);
-
-    if (d.labels) buildLabel(idx, layer, sx, sy, cw, ch, sw, sh);
     st.built++;
   }
 
-  function labelTemplate() {
-    if (st.labelTpl) return st.labelTpl;
-    var d = st.data;
-    var l = st.main.layers.addText('CAM 000');
-    l.name = '\u00b7label template';
-    l.comment = TAG + '-labeltpl';
-    l.enabled = false;
-    var td = l.property('ADBE Text Properties').property('ADBE Text Document').value;
-    td.fontSize = Math.max(7, Math.min(72, Math.round(Math.min(d.grid.cellW, d.grid.cellH) * 0.14)));
-    td.applyFill = true;
-    td.fillColor = [1, 1, 1];
-    td.applyStroke = false;
-    var fonts = ['Menlo-Regular', 'Consolas', 'CourierNewPSMT', 'Courier'];
-    for (var i = 0; i < fonts.length; i++) {
-      try {
-        td.font = fonts[i];
-        break;
-      } catch (e) {}
-    }
-    // one TextDocument write total (AE leaks undo objects per scripted TextDocument set -- see TwitchSim notes)
-    l.property('ADBE Text Properties').property('ADBE Text Document').setValue(td);
-    st.labelTpl = l;
-    return l;
-  }
-
-  /** The CAM tag sits at the CELL's bottom-left (a bezel label), whatever the fit mode --
-   *  in 'contain' the video strip may not reach the cell edges, and the label must not
-   *  end up floating over the middle of the picture. Positions are in the parent screen
-   *  layer's source space; the label's own scale cancels the parent's so text stays 1:1. */
-  function buildLabel(idx, screenLayer, sx, sy, cw, ch, sw, sh) {
-    var d = st.data;
-    var tpl = labelTemplate();
-    var l = tpl.duplicate();
-    l.name = 'Label ' + pad3(idx + 1, st.padWidth);
-    l.comment = TAG + '-label ' + idx;
-    l.enabled = true;
-    l.moveBefore(screenLayer);
-    var prefix = d.labels && d.labels.prefix ? d.labels.prefix : 'CAM';
-    l.property('ADBE Text Properties').property('ADBE Text Document').expression = q(prefix + ' ' + pad3(idx + 1, st.padWidth));
-    l.parent = screenLayer;
-    var pad = Math.max(2, Math.min(cw, ch) * 0.07);
-    tf(l).property('ADBE Position').setValue([sw / 2 - (cw / 2 - pad) / sx, sh / 2 + (ch / 2 - pad) / sy]);
-    tf(l).property('ADBE Scale').setValue([100 / sx, 100 / sy]);
-    tf(l).property('ADBE Opacity').expression = labelOpacityExpr();
-  }
-
-  // ---------------------------------------------------------------- background / static
+  // ---------------------------------------------------------------- background
 
   function buildBackground() {
     var d = st.data;
@@ -695,222 +705,6 @@ $.global.WALLMAKER = (function () {
       bg.source.comment = TAG + '-solid';
     } catch (e) {}
     st.bgLayer = bg;
-    if (d.bg.mode === 'static') buildStatic();
-  }
-
-  function buildStatic() {
-    var d = st.data;
-    var w = Math.max(4, Math.round(d.grid.wallW));
-    var h = Math.max(4, Math.round(d.grid.wallH));
-    var sc = app.project.items.addComp('Wallmaker static (' + d.compName + ')', w, h, 1, st.main.duration, d.fps);
-    sc.parentFolder = st.root;
-    sc.comment = TAG + '-staticcomp';
-    var solid = sc.layers.addSolid([0.5, 0.5, 0.5], 'noise', w, h, 1, sc.duration);
-    try {
-      solid.source.parentFolder = st.root;
-      solid.source.comment = TAG + '-solid';
-    } catch (eS) {}
-    var fx = solid.property('ADBE Effect Parade').addProperty('ADBE Fractal Noise');
-    try {
-      fx.property('Contrast').setValue(400);
-    } catch (e) {}
-    try {
-      fx.property('Brightness').setValue(-40);
-    } catch (e) {}
-    try {
-      fx.property('Transform').property('Scale').setValue(8);
-    } catch (e) {}
-    try {
-      fx.property('Evolution').expression = 'time * 3600';
-    } catch (e) {}
-    var l = st.main.layers.add(sc);
-    l.name = 'Static';
-    l.comment = TAG + '-staticlayer';
-    l.parent = st.ctl;
-    tf(l).property('ADBE Position').setValue([0, 0]);
-    tf(l).property('ADBE Opacity').expression = exprLib() + 'C(' + q('Static brightness (%)') + ', ' + num(d.bg.staticBrightness, 14) + ')';
-    st.staticLayer = l;
-  }
-
-  /** One shape layer for every cell frame: a stroked rect + two repeaters (cols x rows), all
-   *  live-linked to the Gap slider. Sits UNDER the screens: visible in gaps and on off screens. */
-  function buildBorders() {
-    var d = st.data;
-    if (!d.borders) return;
-    var l = st.main.layers.addShape();
-    l.name = 'Borders';
-    l.comment = TAG + '-borders';
-    l.parent = st.ctl;
-    tf(l).property('ADBE Position').setValue([0, 0]);
-    var contents = l.property('ADBE Root Vectors Group');
-    var lib = exprLib();
-    var gapRef = 'C(' + q('Gap (px)') + ', ' + num(d.grid.gap, 0) + ')';
-    var widthRef = 'C(' + q('Border (px)') + ', ' + num(d.borders.width, 2) + ')';
-    function addCellGroup(name, w, h, posExprBody, copies) {
-      var grp = contents.addProperty('ADBE Vector Group');
-      grp.name = name;
-      var gg = grp.property('ADBE Vectors Group');
-      var rect = gg.addProperty('ADBE Vector Shape - Rect');
-      rect.property('ADBE Vector Rect Size').setValue([w, h]);
-      rect.property('ADBE Vector Rect Position').setValue([0, 0]);
-      rect.property('ADBE Vector Rect Roundness').setValue(num(d.cornerRadius, 0));
-      var stroke = gg.addProperty('ADBE Vector Graphic - Stroke');
-      stroke.property('ADBE Vector Stroke Color').setValue([d.borders.color[0], d.borders.color[1], d.borders.color[2], 1]);
-      stroke.property('ADBE Vector Stroke Width').setValue(num(d.borders.width, 2));
-      try {
-        stroke.property('ADBE Vector Stroke Width').expression = lib + widthRef;
-      } catch (e) {}
-      if (copies) {
-        var rep1 = gg.addProperty('ADBE Vector Filter - Repeater');
-        rep1.property('ADBE Vector Repeater Copies').setValue(d.grid.cols);
-        var rt1 = rep1.property('ADBE Vector Repeater Transform');
-        rt1.property('ADBE Vector Repeater Position').setValue([d.grid.cellW + d.grid.gap, 0]);
-        try {
-          rt1.property('ADBE Vector Repeater Position').expression = lib + '[' + d.grid.cellW + ' + ' + gapRef + ', 0]';
-        } catch (e2) {}
-        var rep2 = gg.addProperty('ADBE Vector Filter - Repeater');
-        rep2.property('ADBE Vector Repeater Copies').setValue(d.grid.rows);
-        var rt2 = rep2.property('ADBE Vector Repeater Transform');
-        rt2.property('ADBE Vector Repeater Position').setValue([0, d.grid.cellH + d.grid.gap]);
-        try {
-          rt2.property('ADBE Vector Repeater Position').expression = lib + '[0, ' + d.grid.cellH + ' + ' + gapRef + ']';
-        } catch (e3) {}
-      }
-      var gt = grp.property('ADBE Vector Transform Group');
-      gt.property('ADBE Vector Position').setValue([0, 0]);
-      try {
-        gt.property('ADBE Vector Position').expression = lib + posExprBody;
-      } catch (e4) {}
-      return grp;
-    }
-    // the base grid: copy (0,0) sits at cell (0,0)'s center
-    addCellGroup(
-      'cells',
-      d.grid.cellW,
-      d.grid.cellH,
-      'var g = ' + gapRef + ';\n[-(' + ((d.grid.cols - 1) / 2) + ') * (' + d.grid.cellW + ' + g), -(' + ((d.grid.rows - 1) / 2) + ') * (' + d.grid.cellH + ' + g)]',
-      true
-    );
-    // hero outlines (block frames around 2x2 monitors)
-    for (var i = 0; i < d.screens.length; i++) {
-      var sc = d.screens[i];
-      if (num(sc.span, 1) < 2) continue;
-      var hw = d.grid.cellW * sc.span + d.grid.gap * (sc.span - 1);
-      var hh = d.grid.cellH * sc.span + d.grid.gap * (sc.span - 1);
-      var rowF = sc.row + (sc.span - 1) / 2;
-      var colF = sc.col + (sc.span - 1) / 2;
-      addCellGroup(
-        'hero ' + (i + 1),
-        hw,
-        hh,
-        'var g = ' + gapRef + ';\n[(' + colF + ' - ' + ((d.grid.cols - 1) / 2) + ') * (' + d.grid.cellW + ' + g), (' + rowF + ' - ' + ((d.grid.rows - 1) / 2) + ') * (' + d.grid.cellH + ' + g)]',
-        false
-      );
-    }
-    st.bordersLayer = l;
-  }
-
-  /** CRT scanlines: a black wall-sized solid with Venetian Blinds, opacity on a live slider. */
-  function buildScanlines() {
-    var d = st.data;
-    if (!d.scanlines) return;
-    var w = Math.max(4, Math.round(d.grid.wallW));
-    var h = Math.max(4, Math.round(d.grid.wallH));
-    var l = st.main.layers.addSolid([0, 0, 0], 'Scanlines', w, h, 1, st.main.duration);
-    l.comment = TAG + '-scanlines';
-    try {
-      l.source.parentFolder = st.root;
-      l.source.comment = TAG + '-solid';
-    } catch (e) {}
-    l.parent = st.ctl;
-    tf(l).property('ADBE Position').setValue([0, 0]);
-    try {
-      var fx = l.property('ADBE Effect Parade').addProperty('ADBE Venetian Blinds');
-      fx.property('Transition Completion').setValue(50);
-      fx.property('Direction').setValue(0);
-      fx.property('Width').setValue(3);
-    } catch (e2) {}
-    tf(l).property('ADBE Opacity').expression = exprLib() + 'C(' + q('Scanlines (%)') + ', ' + num(d.scanlines.strength, 25) + ')';
-    st.scanLayer = l;
-  }
-
-  /**
-   * The intro/outro camera move: eased Scale + Position keyframes on the Controls null so the
-   * comp starts (and/or ends) filled by one screen. The camera OWNS those two properties while
-   * it is on -- a ' cam' marker in the null's comment tells a later rebuild the keys are ours,
-   * so switching the camera off cleans them up without ever touching hand-made keyframes.
-   */
-  function applyCamera(ctl) {
-    var d = st.data;
-    var cam = d.camera;
-    var sp = tf(ctl).property('ADBE Scale');
-    var pp = tf(ctl).property('ADBE Position');
-    var ownedBefore = hasCamMark(ctl);
-    if (!cam) {
-      if (ownedBefore) {
-        try {
-          while (sp.numKeys > 0) sp.removeKey(1);
-          while (pp.numKeys > 0) pp.removeKey(1);
-          sp.setValue([100, 100]);
-          pp.setValue([d.frame.w / 2, d.frame.h / 2]);
-          if (st.ctlRec) {
-            st.ctlRec.__cx = d.frame.w / 2;
-            st.ctlRec.__cy = d.frame.h / 2;
-          }
-        } catch (e0) {}
-        setCamMark(ctl, false);
-      }
-      return;
-    }
-    try {
-      while (sp.numKeys > 0) sp.removeKey(1);
-      while (pp.numKeys > 0) pp.removeKey(1);
-      var W = d.frame.w;
-      var H = d.frame.h;
-      var k = cam.scale;
-      var zoomP = [W / 2 - (k / 100) * cam.p[0], H / 2 - (k / 100) * cam.p[1]];
-      var homeS = [100, 100];
-      var homeP = [W / 2, H / 2];
-      var zoomS = [k, k];
-      // the plan carries ABSOLUTE, already-clamped key times (src/core/reveal.ts planCamera):
-      // the preview plays the same numbers, so AE and the panel cannot disagree
-      var keys = [];
-      if (cam.intro) {
-        if (cam.intro.hold > 0) keys.push({ t: 0, s: zoomS, p: zoomP });
-        keys.push({ t: cam.intro.hold, s: zoomS, p: zoomP });
-        keys.push({ t: cam.intro.end, s: homeS, p: homeP });
-      }
-      if (cam.outro) {
-        keys.push({ t: cam.outro.start, s: homeS, p: homeP });
-        keys.push({ t: cam.outro.end, s: zoomS, p: zoomP });
-      }
-      var ease = new KeyframeEase(0, 75);
-      for (var i = 0; i < keys.length; i++) {
-        var ki = keys[i];
-        var siN = sp.addKey(ki.t);
-        sp.setValueAtKey(siN, ki.s);
-        var piN = pp.addKey(ki.t);
-        pp.setValueAtKey(piN, ki.p);
-      }
-      for (var j = 1; j <= sp.numKeys; j++) {
-        try {
-          sp.setTemporalEaseAtKey(j, [ease, ease], [ease, ease]);
-        } catch (eE1) {}
-      }
-      for (var m = 1; m <= pp.numKeys; m++) {
-        try {
-          pp.setTemporalEaseAtKey(m, [ease], [ease]);
-        } catch (eE2) {}
-        try {
-          pp.setSpatialTangentsAtKey(m, [0, 0], [0, 0]);
-        } catch (eE3) {}
-      }
-      if (st.ctlRec) {
-        st.ctlRec.__cx = homeP[0];
-        st.ctlRec.__cy = homeP[1];
-      }
-      setCamMark(ctl, true);
-    } catch (eCam) {}
   }
 
   // ---------------------------------------------------------------- build flow
@@ -942,13 +736,11 @@ $.global.WALLMAKER = (function () {
         footFolder: null,
         main: null,
         ctl: null,
+        cam: null,
         bgLayer: null,
-        staticLayer: null,
-        labelTpl: null,
         ctlRec: null,
-        bordersLayer: null,
-        scanLayer: null,
-        focusNull: null,
+        camRec: null,
+        keptCamKeys: false,
         padWidth: String(data.screens.length).length > 2 ? String(data.screens.length).length : 2
       };
       // refuse a foreign comp-name clash BEFORE creating anything (no orphan folders on error)
@@ -974,7 +766,6 @@ $.global.WALLMAKER = (function () {
       for (var i = root.numItems; i >= 1; i--) {
         var it = root.item(i);
         if (it instanceof FolderItem && it.comment === TAG + '-videos') st.footFolder = it;
-        else if (it instanceof CompItem && it.comment === TAG + '-staticcomp') removeItemDeep(it);
       }
       if (!st.footFolder) {
         st.footFolder = app.project.items.addFolder('videos');
@@ -997,20 +788,20 @@ $.global.WALLMAKER = (function () {
         main.height = data.frame.h;
         main.duration = dur;
         main.frameRate = data.fps;
-        // wipe our previous layers; keep the controls null (its values/keyframes) and any user-added layers
+        // wipe our previous layers; keep the rig (its values and your keyframes) and any user-added layers
         for (var k = main.numLayers; k >= 1; k--) {
           var l = main.layer(k);
-          if (isOurs(l) && l.comment.indexOf(TAG + '-controls') !== 0 && l.comment.indexOf(TAG + '-focus') !== 0) l.remove();
+          if (isOurs(l) && l.comment.indexOf(TAG + '-controls') !== 0 && l.comment.indexOf(TAG + '-camera') !== 0) l.remove();
         }
       }
       main.bgColor = [data.bg.color[0], data.bg.color[1], data.bg.color[2]];
       st.main = main;
-      st.ctl = ensureControls(main);
-      applyCamera(st.ctl);
-      setCtlRecord(st.ctl, st.ctlRec || {});
-      st.focusNull = ensureFocusNull(main);
+      st.cam = ensureCamera(main);
+      st.ctl = ensureControls(main); // parents itself to the camera
+      applyCamera(st.cam);
+      setRec(st.cam, st.camRec || {});
+      setRec(st.ctl, st.ctlRec || {});
       buildBackground();
-      buildBorders();
       return reply({ total: data.screens.length });
     } finally {
       app.endUndoGroup();
@@ -1041,23 +832,10 @@ $.global.WALLMAKER = (function () {
     }
     app.beginUndoGroup('Wallmaker: build (finish)');
     try {
-      var d = st.data;
-      if (st.labelTpl) st.labelTpl.remove();
-      buildScanlines();
-      // bottom to top: Background, Static, Borders, screens & labels, Scanlines, Focus, Controls
-      if (st.bordersLayer) st.bordersLayer.moveToEnd();
-      if (st.staticLayer) st.staticLayer.moveToEnd();
+      // bottom to top: Background, screens, Controls, Camera
       if (st.bgLayer) st.bgLayer.moveToEnd();
-      if (st.scanLayer) st.scanLayer.moveToBeginning();
-      if (st.focusNull) st.focusNull.moveToBeginning();
-      if (!st.data.focus) {
-        // the feature was switched off on a rebuild: drop the stale focus null
-        for (var fi = st.main.numLayers; fi >= 1; fi--) {
-          var fl = st.main.layer(fi);
-          if (isOurs(fl) && fl.comment.indexOf(TAG + '-focus') === 0) fl.remove();
-        }
-      }
       if (st.ctl) st.ctl.moveToBeginning();
+      if (st.cam) st.cam.moveToBeginning();
       // drop footage that no build uses any more (e.g. a rebuild with a different set of videos)
       if (st.footFolder) {
         for (var i = st.footFolder.numItems; i >= 1; i--) {
@@ -1081,7 +859,7 @@ $.global.WALLMAKER = (function () {
       try {
         st.main.openInViewer();
       } catch (e2) {}
-      var out = { compName: st.main.name, screens: st.built, videos: videos, skipped: st.skipped };
+      var out = { compName: st.main.name, screens: st.built, videos: videos, skipped: st.skipped, keptCamKeys: !!st.keptCamKeys };
       st = null;
       return reply(out);
     } finally {
@@ -1170,22 +948,27 @@ $.global.WALLMAKER = (function () {
     return reply(out);
   }
 
-  /** Evaluated Scale/Position of the Controls null at a time (camera verification). */
-  function ctlState(json) {
+  /** Evaluated camera transform + the zoom keyframes at a time (camera verification). */
+  function camState(json) {
     var a = args(json);
     var comp = findCompByName(String(a.compName));
     if (!comp) throw new Error('Comp not found: ' + a.compName);
-    var ctl = null;
-    for (var i = 1; i <= comp.numLayers; i++) {
-      var l = comp.layer(i);
-      if (isOurs(l) && l.comment.indexOf(TAG + '-controls') === 0) ctl = l;
-    }
-    if (!ctl) throw new Error('Controls null not found');
+    var cam = findTagged(comp, 'camera');
+    var ctl = findTagged(comp, 'controls');
+    if (!cam) throw new Error('Camera null not found');
     var t = num(a.time, 0);
+    var zp = null;
+    var fx = cam.property('ADBE Effect Parade');
+    for (var i = 1; i <= fx.numProperties; i++) if (fx.property(i).name === 'Zoom to screen (%)') zp = fx.property(i).property(1);
+    var keys = [];
+    if (zp) for (var k = 1; k <= zp.numKeys; k++) keys.push([Math.round(zp.keyTime(k) * 1000) / 1000, Math.round(zp.keyValue(k) * 100) / 100]);
     return reply({
-      scale: tf(ctl).property('ADBE Scale').valueAtTime(t, false),
-      pos: tf(ctl).property('ADBE Position').valueAtTime(t, false),
-      keys: tf(ctl).property('ADBE Scale').numKeys
+      scale: tf(cam).property('ADBE Scale').valueAtTime(t, false),
+      pos: tf(cam).property('ADBE Position').valueAtTime(t, false),
+      zoom: zp ? zp.valueAtTime(t, false) : null,
+      keys: keys,
+      ctlPos: ctl ? tf(ctl).property('ADBE Position').valueAtTime(t, false) : null,
+      ctlParent: ctl && ctl.parent ? ctl.parent.name : null
     });
   }
 
@@ -1202,5 +985,5 @@ $.global.WALLMAKER = (function () {
     return reply(out);
   }
 
-  return { info: info, begin: begin, step: step, finish: finish, remove: removeBuild, selectedSources: selectedSources, snapshot: snapshot, probe: probe, ctlState: ctlState, layers: layersInfo, version: VERSION };
+  return { info: info, begin: begin, step: step, finish: finish, remove: removeBuild, selectedSources: selectedSources, snapshot: snapshot, probe: probe, camState: camState, layers: layersInfo, version: VERSION };
 })();

@@ -33,7 +33,7 @@
     "vite": "^8.2.0",
     "ws": "^8.18.0"
   },
-  "description": "Wallmaker — build walls of videos (CCTV-style monitor grids) as real After Effects layers, with staggered power-on reveals driven by live expression controls.",
+  "description": "Wallmaker — build perfect grids of videos as real After Effects layers, with a keyframable camera that zooms out of one screen to reveal the whole wall.",
   "repository": { "type": "git", "url": "https://github.com/newomp4/wallmaker.git" },
   "license": "MIT",
   "engines": { "node": "^20.19.0 || >=22.12.0" }

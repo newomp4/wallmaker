@@ -2,7 +2,6 @@
  * Live wall preview: draws the planned grid on a canvas and plays the reveal using the exact same
  * math (`planScreens` / `screenStateAt`) the AE build bakes into expressions. Inside the panel it
  * also pulls one real frame per video (file:// access is enabled for CEP) as screen thumbnails.
- * With the Focus spotlight on, moving the mouse over the preview plays the Focus null.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Config } from '../core/types'
@@ -84,15 +83,9 @@ function hashHue(s: string): number {
   return (h >>> 0) % 360
 }
 
-function smoothstep(k: number): number {
-  const c = Math.max(0, Math.min(1, k))
-  return c * c * (3 - 2 * c)
-}
-
 export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partial<Config>) => void }) {
   const src = useSources(rawCfg, patch)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const mouse = useRef<{ x: number; y: number } | null>(null)
   const [t, setT] = useState(0)
   const [playing, setPlaying] = useState(true)
   const [thumbVersion, setVersion] = useState(0)
@@ -139,9 +132,6 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
     return () => cancelAnimationFrame(raf)
   }, [playing, cfg.durationSec])
 
-  // focus hover needs continuous redraws even when paused
-  const [hoverTick, setHoverTick] = useState(0)
-
   // draw
   useEffect(() => {
     const canvas = canvasRef.current
@@ -153,7 +143,7 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
     if (canvas.height !== H) canvas.height = H
     const ctx = canvas.getContext('2d')!
     ctx.clearRect(0, 0, W, H)
-    if (cfg.background !== 'transparent') {
+    if (cfg.background === 'solid') {
       ctx.fillStyle = /^#[0-9a-f]{6}$/i.test(cfg.bgColor) ? cfg.bgColor : '#0a0a0c'
       ctx.fillRect(0, 0, W, H)
     }
@@ -165,48 +155,16 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
     const cx0 = W / 2 + cam.x * scale
     const cy0 = H / 2 + cam.y * scale
     const baseRadius = cfg.cornerRadius * scale * cam.k
-    const focus = cfg.focus && mouse.current ? mouse.current : null
 
-    // borders sit under the screens: visible in gaps and where screens are off
-    if (cfg.borders && cw > 7 && ch > 7) {
-      ctx.strokeStyle = /^#[0-9a-f]{6}$/i.test(cfg.borderColor) ? cfg.borderColor : '#2a2a30'
-      ctx.lineWidth = Math.max(0.75, cfg.borderWidth * scale)
-      for (const s of screens) {
-        const w = cw * s.span + gap * (s.span - 1)
-        const h = ch * s.span + gap * (s.span - 1)
-        const px = cx0 + (s.col + (s.span - 1) / 2 - (grid.cols - 1) / 2) * (cw + gap)
-        const py = cy0 + (s.row + (s.span - 1) / 2 - (grid.rows - 1) / 2) * (ch + gap)
-        rr(ctx, px - w / 2, py - h / 2, w, h, Math.min(baseRadius, w / 2, h / 2))
-        ctx.stroke()
-      }
-    }
-
-    const showLabels = cfg.labels && cw >= 42 && ch >= 26
-    const pad = (n: number) => String(n).padStart(String(screens.length).length > 2 ? String(screens.length).length : 2, '0')
     for (const s of screens) {
       const st = screenStateAt(t, s, cfg)
-      const w0 = cw * s.span + gap * (s.span - 1)
-      const h0 = ch * s.span + gap * (s.span - 1)
-      const px = cx0 + (s.col + (s.span - 1) / 2 - (grid.cols - 1) / 2) * (cw + gap)
-      const py = cy0 + (s.row + (s.span - 1) / 2 - (grid.rows - 1) / 2) * (ch + gap)
-      let opacity = st.opacity
-      let sc = st.scale
-      if (focus) {
-        const dd = Math.hypot(px - focus.x, py - focus.y)
-        const k = smoothstep(1 - dd / Math.max(1, cfg.focusRadius * scale * cam.k))
-        sc *= 1 + (cfg.focusZoom / 100 - 1) * k
-        opacity *= 1 - Math.min(1, cfg.focusDim / 100) * (1 - k)
-      }
-      if (opacity <= 0.01 || sc <= 0.01) {
-        if (cfg.background === 'static') {
-          ctx.fillStyle = 'rgba(128,128,128,' + (0.006 * cfg.staticBrightness).toFixed(3) + ')'
-          rr(ctx, px - w0 / 2, py - h0 / 2, w0, h0, Math.min(baseRadius, w0 / 2, h0 / 2))
-          ctx.fill()
-        }
-        continue
-      }
-      const w = w0 * sc
-      const h = h0 * sc
+      const px = cx0 + (s.col - (grid.cols - 1) / 2) * (cw + gap)
+      const py = cy0 + (s.row - (grid.rows - 1) / 2) * (ch + gap)
+      const opacity = st.opacity
+      const sc = st.scale
+      if (opacity <= 0.01 || sc <= 0.01) continue
+      const w = cw * sc
+      const h = ch * sc
       const radius = Math.min(baseRadius * sc, w / 2, h / 2)
       ctx.save()
       ctx.globalAlpha = Math.min(1, opacity)
@@ -246,38 +204,22 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
           ctx.textAlign = 'start'
         }
       }
+      ctx.restore()
+      // the centered screen gets a ring -- drawn OUTSIDE the clip and inset, or half the stroke
+      // disappears into the cell edge and the marker is invisible at preview scale
       if (s.featured && w >= 20) {
-        ctx.strokeStyle = 'rgba(134,239,172,.9)'
-        ctx.lineWidth = Math.max(1.25, 2 * scale * cam.k)
-        ctx.shadowColor = 'rgba(134,239,172,.5)'
-        ctx.shadowBlur = 6 * scale * cam.k
-        rr(ctx, px - w / 2, py - h / 2, w, h, radius)
+        const lw = Math.max(2, 3 * scale * cam.k)
+        ctx.save()
+        ctx.strokeStyle = 'rgba(134,239,172,.95)'
+        ctx.lineWidth = lw
+        ctx.shadowColor = 'rgba(134,239,172,.55)'
+        ctx.shadowBlur = 10 * scale * cam.k
+        rr(ctx, px - w / 2 + lw / 2, py - h / 2 + lw / 2, w - lw, h - lw, Math.max(0, radius - lw / 2))
         ctx.stroke()
-        ctx.shadowBlur = 0
+        ctx.restore()
       }
-      if (showLabels) {
-        ctx.fillStyle = 'rgba(255,255,255,.85)'
-        ctx.font = `${Math.max(8, Math.round(Math.min(cw, ch) * 0.13))}px ui-monospace, Menlo, monospace`
-        ctx.textBaseline = 'bottom'
-        ctx.fillText(`${cfg.labelPrefix || 'CAM'} ${pad(s.i + 1)}`, px - w / 2 + Math.min(cw, ch) * 0.07, py + h / 2 - Math.min(cw, ch) * 0.06)
-      }
-      ctx.restore()
     }
-
-    // scanlines across the whole wall
-    if (cfg.scanlines && cfg.scanStrength > 0) {
-      const wallW = grid.wallW * scale * cam.k
-      const wallH = grid.wallH * scale * cam.k
-      ctx.save()
-      ctx.globalAlpha = (cfg.scanStrength / 100) * 0.55
-      ctx.fillStyle = '#000'
-      const step = Math.max(2, 3 * scale)
-      for (let y = cy0 - wallH / 2; y < cy0 + wallH / 2; y += step * 2) {
-        ctx.fillRect(cx0 - wallW / 2, y, wallW, step)
-      }
-      ctx.restore()
-    }
-  }, [cfg, grid, screens, camera, t, hoverTick, thumbVersion])
+  }, [cfg, grid, screens, camera, t, thumbVersion])
 
   const loaded = cfg.videos.filter((p) => {
     const th = thumbs.get(p)
@@ -331,28 +273,16 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
             {src.error && <p className="hint err">{src.error}</p>}
           </div>
         )}
-        <div className={'preview-stage' + (cfg.background === 'transparent' ? ' checker' : '') + (sourceCount === 0 ? ' dimmed' : '')}>
-          <canvas
-            ref={canvasRef}
-            style={{ maxWidth: '100%', height: 'auto', cursor: cfg.focus ? 'crosshair' : 'default' }}
-            onMouseMove={(e) => {
-              if (!cfg.focus) return
-              const r = e.currentTarget.getBoundingClientRect()
-              const kx = e.currentTarget.width / r.width
-              mouse.current = { x: (e.clientX - r.left) * kx, y: (e.clientY - r.top) * kx }
-              if (!playing) setHoverTick((v) => v + 1)
-            }}
-            onMouseLeave={() => {
-              mouse.current = null
-              if (!playing) setHoverTick((v) => v + 1)
-            }}
-          />
+        <div
+          className={'preview-stage' + (cfg.background === 'transparent' ? ' checker' : '') + (sourceCount === 0 ? ' dimmed' : '')}
+          style={{ aspectRatio: `${cfg.compW} / ${cfg.compH}` }}
+        >
+          <canvas ref={canvasRef} />
         </div>
         <div className="preview-meta">
           {grid.rows}×{grid.cols} · {screens.length} screens · {Math.round(grid.cellW)}×{Math.round(grid.cellH)} px cells
           {sourceCount > 0 ? ` · ${sourceCount} source${sourceCount === 1 ? '' : 's'}` : ''}
           {cfg.videos.length > 0 && isCEP() ? ` · ${loaded}/${Math.min(cfg.videos.length, 200)} thumbnails` : ''}
-          {cfg.focus ? ' · move the mouse over the wall to play the Focus null' : ''}
         </div>
       </div>
       <QuickBar cfg={rawCfg} patch={patch} />

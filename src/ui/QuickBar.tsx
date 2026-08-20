@@ -45,7 +45,7 @@ export function QuickBar({ cfg, patch }: { cfg: Config; patch: (p: Partial<Confi
       {cfg.cellAspect === 'custom' && (
         <Stepper label="w:h" value={Math.round(cfg.cellAspectCustom * 100) / 100} min={0.1} max={10} step={0.05} onChange={(v) => patch({ cellAspectCustom: v })} />
       )}
-      <button type="button" className="qb-chip" title="Reroll the seed — new random order, dead screens, offsets, big-screen spots" onClick={() => patch({ seed: Math.floor(Math.random() * 100000) })}>
+      <button type="button" className="qb-chip" title="Reroll the seed — new random order, dead screens and start offsets" onClick={() => patch({ seed: Math.floor(Math.random() * 100000) })}>
         <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden>
           <rect x="1.5" y="1.5" width="13" height="13" rx="3" fill="none" stroke="currentColor" strokeWidth="1.5" />
           <circle cx="5.5" cy="5.5" r="1.4" fill="currentColor" />

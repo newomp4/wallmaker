@@ -1,19 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Config } from '../core/types'
-import { PRESETS } from '../core/presets'
 import { useConfig } from './useConfig'
 import { Preview } from './Preview'
 import { SourcesPanel } from './panels/SourcesPanel'
 import { WallPanel } from './panels/WallPanel'
-import { LookPanel } from './panels/LookPanel'
-import { RevealPanel } from './panels/RevealPanel'
+import { MotionPanel } from './panels/MotionPanel'
 import { BuildPanel } from './panels/BuildPanel'
 import { isCEP, callHost } from '../ae/cep'
 import { useSources } from './useSources'
 import { compileWall, buildKeyFor } from '../core/scene'
 import { buildInAE, defaultBuildFolder, hostInfoAE } from '../ae/build'
 
-type Tab = 'videos' | 'wall' | 'look' | 'reveal' | 'ae'
+type Tab = 'videos' | 'wall' | 'motion' | 'ae'
 
 declare global {
   interface Window {
@@ -102,23 +100,6 @@ export default function App() {
           <span className="sub">{isCEP() ? 'walls of videos, as real AE layers' : 'walls of videos for After Effects'}</span>
         </div>
         <div className="topbtns">
-          <select
-            aria-label="Apply a look preset"
-            value=""
-            onChange={(e) => {
-              const p = PRESETS.find((x) => x.name === e.target.value)
-              if (p) patch(p.patch)
-            }}
-          >
-            <option value="" disabled>
-              Looks…
-            </option>
-            {PRESETS.map((p) => (
-              <option key={p.name} value={p.name} title={p.hint}>
-                {p.name}
-              </option>
-            ))}
-          </select>
           <button
             type="button"
             className={'btn' + (armReset ? ' danger' : '')}
@@ -153,8 +134,7 @@ export default function App() {
               [
                 ['videos', `Sources${sources ? ` · ${sources}` : ''}`, TAB_ICONS.videos],
                 ['wall', 'Wall', TAB_ICONS.wall],
-                ['look', 'Look', TAB_ICONS.look],
-                ['reveal', 'Power-on', TAB_ICONS.reveal],
+                ['motion', 'Motion', TAB_ICONS.motion],
                 ['ae', 'Build', TAB_ICONS.ae],
               ] as [Tab, string, ReactNode][]
             ).map(([t, label, icon]) => (
@@ -167,8 +147,7 @@ export default function App() {
           <div className="panel-body">
             {tab === 'videos' && <SourcesPanel cfg={cfg} patch={patch} />}
             {tab === 'wall' && <WallPanel cfg={cfg} patch={patch} />}
-            {tab === 'look' && <LookPanel cfg={cfg} patch={patch} />}
-            {tab === 'reveal' && <RevealPanel cfg={cfg} patch={patch} />}
+            {tab === 'motion' && <MotionPanel cfg={cfg} patch={patch} />}
             {tab === 'ae' && <BuildPanel cfg={cfg} />}
           </div>
         </aside>
@@ -192,16 +171,10 @@ const TAB_ICONS = {
       <rect x="8.9" y="8.9" width="5.6" height="5.6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   ),
-  look: (
+  motion: (
     <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
-      <path d="M8 2.5c3.6 0 6 3.2 6.6 5.5-.6 2.3-3 5.5-6.6 5.5S2 10.3 1.4 8C2 5.7 4.4 2.5 8 2.5Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="8" cy="8" r="2.2" fill="currentColor" />
-    </svg>
-  ),
-  reveal: (
-    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
-      <path d="M8 1.5v6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M4.4 3.6a6 6 0 1 0 7.2 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <rect x="1.4" y="4.2" width="9" height="7.6" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M11.2 8.4 14.5 6v4.8l-3.3-2.4Z" fill="currentColor" />
     </svg>
   ),
   ae: (

@@ -2,16 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Config } from '../core/types'
 import { DEFAULT_CONFIG } from '../core/defaults'
 
-const KEY = 'wallmaker.config.v1'
+const KEY = 'wallmaker.config.v2'
 
 /** union-typed fields and their allowed values — anything else a stale save carries is dropped */
 const ENUMS: Partial<Record<keyof Config, readonly string[]>> = {
   gridMode: ['auto', 'manual'],
   fill: ['cover', 'contain', 'stretch'],
   assign: ['sequential', 'shuffle', 'random'],
-  background: ['dark', 'static', 'transparent'],
-  reveal: ['none', 'random', 'rows', 'cols', 'scanline', 'center', 'edges', 'diagonal'],
-  screenAnim: ['cut', 'fade', 'flicker', 'pop'],
+  background: ['solid', 'transparent'],
+  reveal: ['none', 'random', 'rows', 'cols', 'sequence', 'center', 'edges', 'diagonal'],
+  screenAnim: ['cut', 'fade', 'pop'],
   cellAspect: ['fill', 'wide', 'tv', 'square', 'tall', 'custom'],
   intro: ['none', 'zoomOut'],
   outro: ['none', 'zoomIn'],

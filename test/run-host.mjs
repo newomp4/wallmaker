@@ -23,71 +23,68 @@ const clips = (n) => Array.from({ length: n }, (_, i) => join(assets, `clip-${St
 
 const ROUNDS = {
   A: {
-    // straightforward wall: 3×4, one solid-color clip per screen, fade reveal
+    // straightforward wall: 3x4, one solid-color clip per screen, fade reveal, no camera move
     cfg: {
       videos: clips(12),
       compName: 'Wallmaker test A',
       compW: 1920, compH: 1080, fps: 30, durationSec: 10,
       gridMode: 'manual', rows: 3, cols: 4, gap: 8, margin: 40,
       fill: 'stretch', cornerRadius: 0, assign: 'sequential',
-      randomStart: true, loop: true, muteAudio: true, labels: false,
-      background: 'dark', bgColor: '#101014',
+      randomStart: true, loop: true, muteAudio: true,
+      background: 'solid', bgColor: '#101014',
       animate: true, reveal: 'random', revealStart: 0.5, revealDuration: 5,
       screenAnim: 'fade', screenAnimFrames: 6, jitter: 0.2, deadPct: 0, seed: 3,
     },
     times: [0.2, 3.0, 8.0],
   },
   B: {
-    // stress + variance: 10×10 vertical, reuse, dead screens, flicker, static bg, labels, contain
+    // stress + variance: 10x10 vertical, source reuse, dead screens, scale-up power-on, contain fit
     cfg: {
       videos: [...clips(12), join(assets, 'pattern-hd.mp4'), join(assets, 'pattern-vertical.mp4')],
       compName: 'Wallmaker test B',
       compW: 1080, compH: 1920, fps: 24, durationSec: 12,
       gridMode: 'manual', rows: 10, cols: 10, gap: 4, margin: 0,
       fill: 'contain', cornerRadius: 6, assign: 'shuffle',
-      randomStart: true, loop: true, muteAudio: true, labels: true, labelPrefix: 'CAM',
-      background: 'static', bgColor: '#05070a', staticBrightness: 12,
+      randomStart: true, loop: true, muteAudio: true,
+      background: 'solid', bgColor: '#05070a',
       animate: true, reveal: 'center', revealStart: 1, revealDuration: 6,
-      screenAnim: 'flicker', screenAnimFrames: 10, jitter: 0.1, deadPct: 20, dropouts: 50, seed: 11,
+      screenAnim: 'pop', screenAnimFrames: 10, jitter: 0.1, deadPct: 20, seed: 11,
     },
     times: [0.5, 4.37, 9.43],
   },
   D: {
-    // the feature round: hero 2×2 screens, borders, scanlines, focus spotlight, a comp as a source
+    // rounded corners, a comp as a source, an ordered sweep, an outer margin
     cfg: {
       videos: clips(10),
       compName: 'Wallmaker test D',
       compW: 1920, compH: 1080, fps: 30, durationSec: 10,
-      gridMode: 'manual', rows: 6, cols: 6, gap: 8, margin: 20, heroes: 2,
+      gridMode: 'manual', rows: 6, cols: 6, gap: 8, margin: 20,
       fill: 'cover', cornerRadius: 26, assign: 'sequential',
-      randomStart: true, loop: true, muteAudio: true, labels: false,
-      background: 'dark', bgColor: '#0b0b0e',
-      borders: true, borderWidth: 2, borderColor: '#30303a',
-      scanlines: true, scanStrength: 25,
+      randomStart: true, loop: true, muteAudio: true,
+      background: 'solid', bgColor: '#0b0b0e',
       animate: true, reveal: 'edges', revealStart: 0.4, revealDuration: 4,
-      screenAnim: 'cut', screenAnimFrames: 1, jitter: 0, deadPct: 0, dropouts: 0, seed: 21,
-      focus: true, focusRadius: 600, focusZoom: 150, focusDim: 0,
+      screenAnim: 'cut', screenAnimFrames: 1, jitter: 0, deadPct: 0, seed: 21,
     },
     times: [0.15, 2.4, 7.0],
     // the runner swaps one video for a freshly created solid-color comp (tests comps as sources)
     compSource: { name: 'WM comp source', hex: '2ECC71' },
   },
   F: {
-    // aspect-locked cells + featured screen + camera: zoom-out intro, zoom-in outro, no power-on animation
+    // THE use case: aspect-locked identical cells, one source centered, zoom out then back in
     cfg: {
       videos: clips(9),
       compName: 'Wallmaker test F',
       compW: 1920, compH: 1080, fps: 30, durationSec: 10,
-      gridMode: 'manual', rows: 4, cols: 5, gap: 6, margin: 0, heroes: 0,
+      gridMode: 'manual', rows: 4, cols: 5, gap: 6, margin: 0,
       cellAspect: 'wide',
-      featured: 4, featuredSpan: 2,
+      featured: 4,
       intro: 'zoomOut', introHold: 1, introDur: 2,
       outro: 'zoomIn', outroHold: 0.4, outroDur: 2,
       fill: 'cover', cornerRadius: 0, assign: 'sequential',
-      randomStart: true, loop: true, muteAudio: true, labels: false,
-      background: 'dark', bgColor: '#0d0d10',
+      randomStart: true, loop: true, muteAudio: true,
+      background: 'solid', bgColor: '#0d0d10',
       animate: false, reveal: 'random', revealStart: 0, revealDuration: 0,
-      screenAnim: 'cut', screenAnimFrames: 1, jitter: 0, deadPct: 0, dropouts: 0, seed: 9,
+      screenAnim: 'cut', screenAnimFrames: 1, jitter: 0, deadPct: 0, seed: 9,
     },
     times: [0.5, 5.0, 9.8],
   },
@@ -153,7 +150,7 @@ function makeRunner({ wallPath, dir, compName, times, compSource }) {
   let snaps = ''
   for (const t of times) {
     probes += `  probes[${j(String(t))}.replace(/"/g, '')] = WALLMAKER_JSON.parse(WALLMAKER.probe(${j({ compName, time: t })}));\n`
-    probes += `  ctls[${j(String(t))}.replace(/"/g, '')] = WALLMAKER_JSON.parse(WALLMAKER.ctlState(${j({ compName, time: t })}));\n`
+    probes += `  cams[${j(String(t))}.replace(/"/g, '')] = WALLMAKER_JSON.parse(WALLMAKER.camState(${j({ compName, time: t })}));\n`
     snaps += `  WALLMAKER.snapshot(${j({ compName, time: t, path: `${dir}/snap-${t}.png` })});\n`
   }
   return `// generated by test/run-host.mjs -- ES3
@@ -178,10 +175,10 @@ ${compSrc}  WALLMAKER.begin(${j({ jsonPath: wallPath, folder: dir })});
   var fin = WALLMAKER.finish();
   var layersJ = WALLMAKER_JSON.parse(WALLMAKER.layers(${j({ compName })}));
   var probes = {};
-  var ctls = {};
+  var cams = {};
 ${probes}
 ${snaps}
-  WRITE('result.json', WALLMAKER_JSON.stringify({ ok: true, finish: WALLMAKER_JSON.parse(fin), probes: probes, ctls: ctls, layers: layersJ }));
+  WRITE('result.json', WALLMAKER_JSON.stringify({ ok: true, finish: WALLMAKER_JSON.parse(fin), probes: probes, cams: cams, layers: layersJ }));
 } catch (e) {
   WRITE('result.json', WALLMAKER_JSON.stringify({ ok: false, error: String(e && e.message ? e.message + ' (line ' + e.line + ')' : e) }));
 }

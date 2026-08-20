@@ -13,20 +13,16 @@ export interface WallScene {
   frame: { w: number; h: number }
   fps: number
   durationSec: number
-  bg: { mode: 'dark' | 'static' | 'transparent'; color: [number, number, number]; staticBrightness: number }
+  bg: { mode: 'solid' | 'transparent'; color: [number, number, number] }
   grid: { rows: number; cols: number; gap: number; cellW: number; cellH: number; wallW: number; wallH: number }
   fill: FillMode
   cornerRadius: number
-  labels: { prefix: string } | null
-  borders: { width: number; color: [number, number, number] } | null
-  scanlines: { strength: number } | null
-  focus: { radius: number; zoom: number; dim: number } | null
   camera: CameraPlan | null
   mute: boolean
   loop: boolean
-  reveal: { mode: string; start: number; duration: number; animFrames: number; style: string; deadPct: number; dropouts: number; seed: number }
+  reveal: { mode: string; start: number; duration: number; animFrames: number; style: string; deadPct: number; seed: number }
   videos: { path?: string; compId?: number; name: string }[]
-  screens: { i: number; row: number; col: number; v: number; th: number; dead: number; offset: number; span: number; featured?: boolean }[]
+  screens: { i: number; row: number; col: number; v: number; th: number; dead: number; offset: number; featured?: boolean }[]
 }
 
 export function safeCompName(name: string): string {
@@ -86,7 +82,7 @@ export function compileWall(rawCfg: Config, opts?: { grid?: GridSpec; screens?: 
     frame: { w: Math.round(cfg.compW), h: Math.round(cfg.compH) },
     fps: cfg.fps,
     durationSec: cfg.durationSec,
-    bg: { mode: cfg.background, color: hexToRgb(cfg.bgColor), staticBrightness: cfg.staticBrightness },
+    bg: { mode: cfg.background, color: hexToRgb(cfg.bgColor) },
     grid: {
       rows: grid.rows,
       cols: grid.cols,
@@ -98,10 +94,6 @@ export function compileWall(rawCfg: Config, opts?: { grid?: GridSpec; screens?: 
     },
     fill: cfg.fill,
     cornerRadius: cfg.cornerRadius,
-    labels: cfg.labels ? { prefix: cfg.labelPrefix || 'CAM' } : null,
-    borders: cfg.borders ? { width: cfg.borderWidth, color: hexToRgb(cfg.borderColor) } : null,
-    scanlines: cfg.scanlines ? { strength: cfg.scanStrength } : null,
-    focus: cfg.focus ? { radius: cfg.focusRadius, zoom: cfg.focusZoom, dim: cfg.focusDim } : null,
     camera: planCamera(cfg, grid, screens),
     mute: cfg.muteAudio,
     loop: cfg.loop,
@@ -112,10 +104,9 @@ export function compileWall(rawCfg: Config, opts?: { grid?: GridSpec; screens?: 
       animFrames: cfg.screenAnimFrames,
       style: cfg.screenAnim,
       deadPct: cfg.deadPct,
-      dropouts: cfg.dropouts,
       seed: cfg.seed,
     },
     videos: unique,
-    screens: screens.map((s) => ({ i: s.i, row: s.row, col: s.col, v: indexOf.get(sourceKeys[s.v % sourceKeys.length])!, th: s.th, dead: s.dead, offset: s.offset, span: s.span, featured: s.featured || undefined })),
+    screens: screens.map((s) => ({ i: s.i, row: s.row, col: s.col, v: indexOf.get(sourceKeys[s.v % sourceKeys.length])!, th: s.th, dead: s.dead, offset: s.offset, featured: s.featured || undefined })),
   }
 }

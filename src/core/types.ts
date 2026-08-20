@@ -3,10 +3,10 @@
 export type GridMode = 'auto' | 'manual'
 export type FillMode = 'cover' | 'contain' | 'stretch'
 export type Assign = 'sequential' | 'shuffle' | 'random'
-export type Background = 'dark' | 'static' | 'transparent'
-export type RevealMode = 'none' | 'random' | 'rows' | 'cols' | 'scanline' | 'center' | 'edges' | 'diagonal'
+export type Background = 'solid' | 'transparent'
+export type RevealMode = 'none' | 'random' | 'rows' | 'cols' | 'sequence' | 'center' | 'edges' | 'diagonal'
 export type CellAspect = 'fill' | 'wide' | 'tv' | 'square' | 'tall' | 'custom'
-export type ScreenAnim = 'cut' | 'fade' | 'flicker' | 'pop'
+export type ScreenAnim = 'cut' | 'fade' | 'pop'
 
 export interface CompRef {
   /** AE project item id — stable within a project */
@@ -29,14 +29,14 @@ export interface Config {
   gridMode: GridMode
   rows: number
   cols: number
-  /** px between screens (bezel) */
+  /** px between screens */
   gap: number
   /** px around the whole wall */
   margin: number
   fill: FillMode
   /** rounded screen corners, px (in cell space) */
   cornerRadius: number
-  /** cell shape: stretch to fill the comp, or lock to an aspect ratio (wall stays centered) */
+  /** cell shape: stretch to fill the comp, or lock every cell to one aspect ratio (wall stays centered) */
   cellAspect: CellAspect
   /** w/h when cellAspect is 'custom' */
   cellAspectCustom: number
@@ -47,18 +47,13 @@ export interface Config {
   randomStart: boolean
   loop: boolean
   muteAudio: boolean
-  labels: boolean
-  labelPrefix: string
 
-  /** monitors that span 2×2 cells (the big screens on a CCTV wall) */
-  heroes: number
-  /** index into the source list (videos then comps) of a screen pinned to the center, always on; -1 = none */
+  /** index into the source list (videos then comps) of the screen at the center of the wall — the
+   *  one the camera zooms to. Always on, playing from its start. -1 = none. */
   featured: number
-  /** the featured screen's size: 1 = one cell, 2 = a 2×2 block */
-  featuredSpan: number
 
-  // ---- camera (keyframed on the Controls null) ----
-  /** start zoomed onto one screen (the featured one, else the centermost), then pull back to the wall */
+  // ---- camera (a keyframed "Zoom to screen (%)" slider on the Wallmaker Camera null) ----
+  /** start filled by the centered screen, then pull back to the whole wall */
   intro: 'none' | 'zoomOut'
   introHold: number
   introDur: number
@@ -67,21 +62,11 @@ export interface Config {
   outroHold: number
   outroDur: number
 
-  // ---- look ----
+  // ---- look (deliberately minimal: grading and texture belong in your own effects) ----
   background: Background
   bgColor: string
-  /** 0..100, opacity of the static-noise underlay ('static' background) */
-  staticBrightness: number
-  /** thin frame around every cell — shows in gaps and on screens that are off */
-  borders: boolean
-  borderWidth: number
-  borderColor: string
-  /** CRT scanline overlay across the wall */
-  scanlines: boolean
-  /** 0..100 scanline strength */
-  scanStrength: number
 
-  // ---- reveal ----
+  // ---- power-on ----
   /** master switch: off = every screen is simply on (no animation at all) */
   animate: boolean
   reveal: RevealMode
@@ -94,17 +79,7 @@ export interface Config {
   jitter: number
   /** 0..100 — screens that never turn on */
   deadPct: number
-  /** 0..100 — how often running screens briefly black out */
-  dropouts: number
   seed: number
-
-  // ---- focus spotlight ----
-  /** adds a draggable "Wallmaker Focus" null: nearby screens zoom / far ones dim */
-  focus: boolean
-  focusRadius: number
-  focusZoom: number
-  /** 0..100 how much screens outside the radius are dimmed */
-  focusDim: number
 }
 
 /** One planned screen: where it sits, what it plays and when it comes alive. All deterministic from the seed. */
@@ -120,16 +95,14 @@ export interface ScreenSpec {
   dead: number
   /** start offset as a fraction 0..1 of the source duration */
   offset: number
-  /** cells spanned per axis: 1 = normal, 2 = hero (2×2) */
-  span: number
-  /** pinned to the wall center, always on, plays from its start */
+  /** the screen at the center of the wall: always on, plays from its start, the camera's target */
   featured?: boolean
 }
 
 export interface GridSpec {
   rows: number
   cols: number
-  /** size of one screen, px */
+  /** size of one screen, px — every cell is identical */
   cellW: number
   cellH: number
   /** full wall footprint, px */

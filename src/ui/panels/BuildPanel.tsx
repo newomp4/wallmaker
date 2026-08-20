@@ -14,7 +14,6 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
   const { busy, progress, result, error, removed } = useBuildState()
   const grid = gridFor(cfg)
   const n = planScreens(withAnimation(cfg), grid).length
-  const heroCount = cfg.heroes > 0 ? planScreens(withAnimation(cfg), grid).filter((s) => s.span === 2).length : 0
   const sources = cfg.videos.length + cfg.comps.length
 
   useEffect(() => {
@@ -72,7 +71,7 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
       <section className="sec">
         <h3>Build</h3>
         <p className="hint">
-          <b>{n}</b> screens ({grid.rows}×{grid.cols} cells{heroCount > 0 ? `, ${heroCount} big` : ''}) from <b>{sources}</b> source{sources === 1 ? '' : 's'} → comp “<b>{cfg.compName}</b>” · {cfg.compW}×{cfg.compH} · {cfg.durationSec} s @ {cfg.fps} fps
+          <b>{n}</b> screens ({grid.rows}×{grid.cols} cells) from <b>{sources}</b> source{sources === 1 ? '' : 's'} → comp “<b>{cfg.compName}</b>” · {cfg.compW}×{cfg.compH} · {cfg.durationSec} s @ {cfg.fps} fps
         </p>
         {host && (
           <p className="hint">
@@ -83,7 +82,7 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
         {info && info.scriptFileAccess === false && <p className="hint err">⚠ Enable Preferences ▸ Scripting &amp; Expressions ▸ “Allow Scripts to Write Files…” — the build writes its plan next to your project.</p>}
         {sources === 0 && <p className="hint err">Add videos or comps on the Videos tab first.</p>}
         {cfg.animate && cfg.revealStart + cfg.revealDuration > cfg.durationSec && (
-          <p className="hint err">⚠ The power-on ends after the comp does ({(cfg.revealStart + cfg.revealDuration).toFixed(1)} s &gt; {cfg.durationSec} s) — some screens will never be seen on. Shorten it on the Power-on tab or lengthen the comp.</p>
+          <p className="hint err">⚠ The power-on ends after the comp does ({(cfg.revealStart + cfg.revealDuration).toFixed(1)} s &gt; {cfg.durationSec} s) — some screens will never be seen on. Shorten it on the Motion tab or lengthen the comp.</p>
         )}
         {n > 400 && <p className="hint">⚠ {n} screens is a lot of layers — the build takes a while and AE will want proxies / lower preview resolution.</p>}
         <div className="btns exportbar">
@@ -122,18 +121,18 @@ function BuildNotes() {
       <h3>What gets built</h3>
       <ul className="help-list">
         <li>
-          <b>Wallmaker Controls</b> (null) — everything is parented to it: move / scale / rotate it to place the whole wall. Its sliders drive the wall live, no rebuild: <b>Reveal start / duration</b>, <b>Turn-on (frames)</b>, <b>Dead screens (%)</b>, <b>Dropouts (%)</b>, <b>Gap (px)</b> (keyframe it — the screens fly apart), <b>Screen scale (%)</b>, <b>Screens opacity (%)</b> — plus <b>Border / Scanlines / Static / Label / Focus</b> sliders when those features are on.
+          <b>Wallmaker Camera</b> (null) — the whole move lives on one keyframable slider, <b>Zoom to screen (%)</b>: 0 = the whole wall, 100 = the centered screen filling the comp. Retime the keys, re-ease them in the graph editor, or animate <b>Target column / row</b> to fly between screens. <b>Extra scale (%)</b> and <b>Pan (px)</b> layer your own move on top. A rebuild never touches keyframes you have edited.
         </li>
         <li>
-          <b>Wallmaker Focus</b> (null, with the Focus spotlight on) — drag or keyframe it and nearby screens zoom while the rest dim.
+          <b>Wallmaker Controls</b> (null, parented to the camera) — every screen hangs off it. Its sliders drive the wall live, no rebuild: <b>Gap (px)</b> (keyframe it and the screens fly apart), <b>Reveal start / duration</b>, <b>Turn-on (frames)</b>, <b>Dead screens (%)</b>, <b>Screen scale (%)</b>, <b>Screens opacity (%)</b>.
         </li>
         <li>
-          <b>Screen 001…</b> — one real footage layer per screen (masked &amp; scaled, random start point). Restyle or swap any of them like any AE layer.
+          <b>Screen 001…</b> — one real footage layer per screen, masked and scaled to its cell. Restyle or swap any of them like any AE layer.
         </li>
         <li>
-          <b>Background</b> / <b>Static</b> — the panel behind the wall; static noise shows wherever screens are off.
+          <b>Background</b> — a plain solid behind the wall (or nothing, if you chose transparent).
         </li>
-        <li>Building again with the same comp name updates the comp in place. Sliders you changed or keyframed in AE keep your values; untouched sliders follow the panel's new settings. Your own added layers survive.</li>
+        <li>Building again with the same comp name updates the comp in place. Sliders and keyframes you changed in AE keep your values; untouched ones follow the panel's new settings. Your own added layers survive.</li>
       </ul>
     </section>
   )
