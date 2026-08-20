@@ -74,24 +74,13 @@ function loadThumb(path: string): Promise<void> {
   })
 }
 
-function hashOf(s: string): number {
-  let h = 2166136261
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i)
-    h = Math.imul(h, 16777619)
-  }
-  return h >>> 0
-}
-
-/**
- * Placeholder fill for a screen with no thumbnail (a comp, or a clip still loading): a flat grey
- * per source so different sources stay distinguishable, checkerboarded a few points lighter/darker
- * by cell so neighbouring screens always read as separate tiles even when they share a source.
- */
-function placeholderGrey(name: string, row: number, col: number, isComp: boolean): string {
-  const base = 18 + (hashOf(name) % 9) * 4 // 18 .. 50
-  const l = base + ((row + col) % 2 === 0 ? 6 : -6) - (isComp ? 4 : 0)
-  return `hsl(0 0% ${Math.max(7, Math.min(60, l)).toFixed(1)}%)`
+/** The two surface tones the panel's own controls use — read from CSS so the preview can never
+ *  drift from the palette. Screens with no thumbnail are checkerboarded between them. */
+function tiles(): [string, string] {
+  const css = getComputedStyle(document.documentElement)
+  const a = css.getPropertyValue('--surface').trim() || '#191a1c'
+  const b = css.getPropertyValue('--surface2').trim() || '#232428'
+  return [a, b]
 }
 
 export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partial<Config>) => void }) {
@@ -166,6 +155,7 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
     const cx0 = W / 2 + cam.x * scale
     const cy0 = H / 2 + cam.y * scale
     const baseRadius = cfg.cornerRadius * scale * cam.k
+    const tone = tiles()
 
     for (const s of screens) {
       const st = screenStateAt(t, s, cfg)
@@ -193,17 +183,13 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
           const k = cfg.fill === 'cover' ? Math.max(w / sw, h / sh) : Math.min(w / sw, h / sh)
           dw = sw * k
           dh = sh * k
-          if (cfg.fill === 'contain') {
-            ctx.fillStyle = '#000'
-            ctx.fillRect(px - w / 2, py - h / 2, w, h)
-          }
         }
         ctx.drawImage(thumb, px - dw / 2, py - dh / 2, dw, dh)
       } else {
-        ctx.fillStyle = placeholderGrey(srcName, s.row, s.col, isComp)
+        ctx.fillStyle = tone[(s.row + s.col) % 2]
         ctx.fillRect(px - w / 2, py - h / 2, w, h)
         if (isComp && w >= 46 && h >= 24) {
-          ctx.fillStyle = 'rgba(255,255,255,.6)'
+          ctx.fillStyle = 'rgba(255,255,255,.5)'
           ctx.font = `${Math.max(8, Math.round(Math.min(h * 0.16, 13)))}px -apple-system, sans-serif`
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
