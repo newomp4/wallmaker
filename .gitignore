@@ -1,0 +1,15 @@
+node_modules
+dist
+*.log
+.DS_Store
+*.local
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# built After Effects panel (npm run build:cep)
+cep/client/
+
+# generated test footage / results (npm run test:videos, test:host, test:panel)
+.test-assets/
+.test-out/

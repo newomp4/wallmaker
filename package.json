@@ -1,0 +1,38 @@
+{
+  "name": "wallmaker",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "lint": "oxlint",
+    "build": "tsc -b && vite build",
+    "build:cep": "vite build --mode cep",
+    "cep:install": "npm run build:cep && node scripts/install-cep.mjs",
+    "cep:link": "npm run build:cep && node scripts/install-cep.mjs --link",
+    "cep:uninstall": "node scripts/install-cep.mjs --uninstall",
+    "test:videos": "node scripts/make-test-videos.mjs",
+    "test:host": "node test/run-host.mjs",
+    "test:panel": "node test/run-panel.mjs"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "oxlint": "^1.75.0",
+    "tsx": "^4.19.2",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.0",
+    "ws": "^8.18.0"
+  },
+  "description": "Wallmaker — build walls of videos (CCTV-style monitor grids) as real After Effects layers, with staggered power-on reveals driven by live expression controls.",
+  "repository": { "type": "git", "url": "https://github.com/newomp4/wallmaker.git" },
+  "license": "MIT",
+  "engines": { "node": "^20.19.0 || >=22.12.0" }
+}
