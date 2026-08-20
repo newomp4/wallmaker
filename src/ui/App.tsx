@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
 import type { Config } from '../core/types'
+import { PRESETS } from '../core/presets'
 import { useConfig } from './useConfig'
 import { Preview } from './Preview'
 import { SourcesPanel } from './panels/SourcesPanel'
 import { WallPanel } from './panels/WallPanel'
+import { LookPanel } from './panels/LookPanel'
 import { RevealPanel } from './panels/RevealPanel'
 import { BuildPanel } from './panels/BuildPanel'
 import { isCEP, callHost } from '../ae/cep'
-import { compileWall } from '../core/scene'
+import { compileWall, buildKeyFor } from '../core/scene'
 import { buildInAE, defaultBuildFolder, hostInfoAE } from '../ae/build'
-import { buildKeyFor } from '../core/scene'
 
-type Tab = 'videos' | 'wall' | 'reveal' | 'ae'
+type Tab = 'videos' | 'wall' | 'look' | 'reveal' | 'ae'
 
 declare global {
   interface Window {
@@ -41,6 +42,7 @@ export default function App() {
     }
   }, [cfg, patch, reset])
 
+  const sources = cfg.videos.length + cfg.comps.length
   return (
     <div className="app">
       <header className="top">
@@ -64,7 +66,31 @@ export default function App() {
           <span className="sub">{isCEP() ? 'walls of videos, as real AE layers' : 'walls of videos for After Effects'}</span>
         </div>
         <div className="topbtns">
-          <button type="button" className="btn" onClick={reset} title="Back to the default settings (your video list is cleared too)">
+          <select
+            aria-label="Apply a look preset"
+            value=""
+            onChange={(e) => {
+              const p = PRESETS.find((x) => x.name === e.target.value)
+              if (p) patch(p.patch)
+            }}
+          >
+            <option value="" disabled>
+              Looks…
+            </option>
+            {PRESETS.map((p) => (
+              <option key={p.name} value={p.name} title={p.hint}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              if (window.confirm('Reset every setting and clear the source list?')) reset()
+            }}
+            title="Back to the default settings (your source list is cleared too)"
+          >
             Reset
           </button>
         </div>
@@ -77,8 +103,9 @@ export default function App() {
           <nav className="tabs">
             {(
               [
-                ['videos', `Videos${cfg.videos.length ? ` (${cfg.videos.length})` : ''}`],
+                ['videos', `Videos${sources ? ` (${sources})` : ''}`],
                 ['wall', 'Wall'],
+                ['look', 'Look'],
                 ['reveal', 'Power-on'],
                 ['ae', 'Build'],
               ] as [Tab, string][]
@@ -91,6 +118,7 @@ export default function App() {
           <div className="panel-body">
             {tab === 'videos' && <SourcesPanel cfg={cfg} patch={patch} />}
             {tab === 'wall' && <WallPanel cfg={cfg} patch={patch} />}
+            {tab === 'look' && <LookPanel cfg={cfg} patch={patch} />}
             {tab === 'reveal' && <RevealPanel cfg={cfg} patch={patch} />}
             {tab === 'ae' && <BuildPanel cfg={cfg} />}
           </div>

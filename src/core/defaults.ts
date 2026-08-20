@@ -2,6 +2,7 @@ import type { Config } from './types'
 
 export const DEFAULT_CONFIG: Config = {
   videos: [],
+  comps: [],
 
   compName: 'Video Wall',
   compW: 1920,
@@ -23,10 +24,18 @@ export const DEFAULT_CONFIG: Config = {
   labels: false,
   labelPrefix: 'CAM',
 
+  heroes: 0,
+
   background: 'dark',
   bgColor: '#0a0a0c',
   staticBrightness: 14,
+  borders: false,
+  borderWidth: 2,
+  borderColor: '#2a2a30',
+  scanlines: false,
+  scanStrength: 25,
 
+  animate: false,
   reveal: 'random',
   revealStart: 0.5,
   revealDuration: 6,
@@ -34,7 +43,13 @@ export const DEFAULT_CONFIG: Config = {
   screenAnimFrames: 8,
   jitter: 0.15,
   deadPct: 0,
+  dropouts: 0,
   seed: 7,
+
+  focus: false,
+  focusRadius: 400,
+  focusZoom: 135,
+  focusDim: 30,
 }
 
 export const COMP_PRESETS: { label: string; w: number; h: number }[] = [

@@ -15,6 +15,7 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
   const busy = useRef(false)
   const grid = gridFor(cfg)
   const n = grid.rows * grid.cols
+  const sources = cfg.videos.length + cfg.comps.length
 
   useEffect(() => {
     if (!inAE) return
@@ -76,7 +77,7 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
       <section className="sec">
         <h3>Build</h3>
         <p className="hint">
-          <b>{n}</b> screens ({grid.rows}×{grid.cols}) from <b>{cfg.videos.length}</b> video{cfg.videos.length === 1 ? '' : 's'} → comp “<b>{cfg.compName}</b>” · {cfg.compW}×{cfg.compH} · {cfg.durationSec} s @ {cfg.fps} fps
+          <b>{n - Math.min(cfg.heroes, Math.floor(n / 4)) * 3}</b> screens ({grid.rows}×{grid.cols} cells{cfg.heroes > 0 ? `, ${Math.min(cfg.heroes, Math.floor(n / 4))} big` : ''}) from <b>{sources}</b> source{sources === 1 ? '' : 's'} → comp “<b>{cfg.compName}</b>” · {cfg.compW}×{cfg.compH} · {cfg.durationSec} s @ {cfg.fps} fps
         </p>
         {host && (
           <p className="hint">
@@ -85,10 +86,13 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
         )}
         {infoErr && <p className="hint err">{infoErr}</p>}
         {info && info.scriptFileAccess === false && <p className="hint err">⚠ Enable Preferences ▸ Scripting &amp; Expressions ▸ “Allow Scripts to Write Files…” — the build writes its plan next to your project.</p>}
-        {cfg.videos.length === 0 && <p className="hint err">Add videos on the Videos tab first.</p>}
+        {sources === 0 && <p className="hint err">Add videos or comps on the Videos tab first.</p>}
+        {cfg.animate && cfg.revealStart + cfg.revealDuration > cfg.durationSec && (
+          <p className="hint err">⚠ The power-on ends after the comp does ({(cfg.revealStart + cfg.revealDuration).toFixed(1)} s &gt; {cfg.durationSec} s) — some screens will never be seen on. Shorten it on the Power-on tab or lengthen the comp.</p>
+        )}
         {n > 400 && <p className="hint">⚠ {n} screens is a lot of layers — the build takes a while and AE will want proxies / lower preview resolution.</p>}
         <div className="btns exportbar">
-          <button type="button" className="btn primary big" disabled={!!building || cfg.videos.length === 0} onClick={build}>
+          <button type="button" className="btn primary big" disabled={!!building || sources === 0} onClick={build}>
             {building ? 'Building…' : 'Build in After Effects'}
           </button>
           <button type="button" className="btn" disabled={!!building} onClick={remove} title="Deletes the Wallmaker folder & comp for this comp name from the project">
@@ -122,7 +126,10 @@ function BuildNotes() {
       <h3>What gets built</h3>
       <ul className="help-list">
         <li>
-          <b>Wallmaker Controls</b> (null) — everything is parented to it: move / scale / rotate it to place the whole wall. Its sliders drive the wall live, no rebuild: <b>Reveal start / duration</b>, <b>Turn-on (frames)</b>, <b>Dead screens (%)</b>, <b>Gap (px)</b> (keyframe it — the screens fly apart), <b>Screen scale (%)</b>, <b>Screens opacity (%)</b>.
+          <b>Wallmaker Controls</b> (null) — everything is parented to it: move / scale / rotate it to place the whole wall. Its sliders drive the wall live, no rebuild: <b>Reveal start / duration</b>, <b>Turn-on (frames)</b>, <b>Dead screens (%)</b>, <b>Dropouts (%)</b>, <b>Gap (px)</b> (keyframe it — the screens fly apart), <b>Screen scale (%)</b>, <b>Screens opacity (%)</b> — plus <b>Border / Scanlines / Static / Label / Focus</b> sliders when those features are on.
+        </li>
+        <li>
+          <b>Wallmaker Focus</b> (null, with the Focus spotlight on) — drag or keyframe it and nearby screens zoom while the rest dim.
         </li>
         <li>
           <b>Screen 001…</b> — one real footage layer per screen (masked &amp; scaled, random start point). Restyle or swap any of them like any AE layer.

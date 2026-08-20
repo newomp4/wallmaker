@@ -32,7 +32,7 @@ const ROUNDS = {
       fill: 'cover', cornerRadius: 0, assign: 'sequential',
       randomStart: true, loop: true, muteAudio: true, labels: false,
       background: 'dark', bgColor: '#101014',
-      reveal: 'random', revealStart: 0.5, revealDuration: 5,
+      animate: true, reveal: 'random', revealStart: 0.5, revealDuration: 5,
       screenAnim: 'fade', screenAnimFrames: 6, jitter: 0.2, deadPct: 0, seed: 3,
     },
     times: [0.2, 3.0, 8.0],
@@ -47,15 +47,35 @@ const ROUNDS = {
       fill: 'cover', cornerRadius: 6, assign: 'shuffle',
       randomStart: true, loop: true, muteAudio: true, labels: true, labelPrefix: 'CAM',
       background: 'static', bgColor: '#05070a', staticBrightness: 12,
-      reveal: 'center', revealStart: 1, revealDuration: 6,
+      animate: true, reveal: 'center', revealStart: 1, revealDuration: 6,
       screenAnim: 'flicker', screenAnimFrames: 10, jitter: 0.1, deadPct: 20, seed: 11,
     },
     times: [0.5, 4.0, 9.0],
   },
+  D: {
+    // the feature round: hero 2×2 screens, borders, scanlines, focus spotlight, a comp as a source
+    cfg: {
+      videos: clips(10),
+      compName: 'Wallmaker test D',
+      compW: 1920, compH: 1080, fps: 30, durationSec: 10,
+      gridMode: 'manual', rows: 6, cols: 6, gap: 8, margin: 20, heroes: 2,
+      fill: 'cover', cornerRadius: 8, assign: 'sequential',
+      randomStart: true, loop: true, muteAudio: true, labels: false,
+      background: 'dark', bgColor: '#0b0b0e',
+      borders: true, borderWidth: 2, borderColor: '#30303a',
+      scanlines: true, scanStrength: 25,
+      animate: true, reveal: 'edges', revealStart: 0.4, revealDuration: 4,
+      screenAnim: 'cut', screenAnimFrames: 1, jitter: 0, deadPct: 0, dropouts: 0, seed: 21,
+      focus: true, focusRadius: 600, focusZoom: 150, focusDim: 0,
+    },
+    times: [0.15, 2.4, 7.0],
+    // the runner swaps one video for a freshly created solid-color comp (tests comps as sources)
+    compSource: { name: 'WM comp source', hex: '2ECC71' },
+  },
 }
 
 const wanted = process.argv.slice(2).filter((a) => ROUNDS[a])
-const runs = wanted.length ? wanted : ['A', 'B']
+const runs = wanted.length ? wanted : ['A', 'B', 'D']
 
 for (const key of runs) {
   const round = ROUNDS[key]
@@ -68,7 +88,8 @@ for (const key of runs) {
   execFileSync('npx', ['tsx', join(root, 'test/make-scene.ts'), cfgPath, wallPath], { stdio: 'inherit', cwd: root })
   const wall = JSON.parse(readFileSync(wallPath, 'utf8'))
 
-  const runner = makeRunner({ wallPath, dir, compName: wall.compName, times: round.times })
+  if (round.compSource) writeFileSync(join(dir, 'extra-colors.json'), JSON.stringify({ [round.compSource.name]: round.compSource.hex }))
+  const runner = makeRunner({ wallPath, dir, compName: wall.compName, times: round.times, compSource: round.compSource })
   const runnerPath = join(dir, 'runner.jsx')
   writeFileSync(runnerPath, runner)
   rmSync(join(dir, 'result.json'), { force: true })
@@ -92,8 +113,18 @@ for (const key of runs) {
 }
 console.log('\n✓ all host rounds passed')
 
-function makeRunner({ wallPath, dir, compName, times }) {
+function makeRunner({ wallPath, dir, compName, times, compSource }) {
   const j = (v) => JSON.stringify(JSON.stringify(v)) // ES3 string literal containing JSON
+  // optionally create a solid-color comp and swap it in for the last source before begin()
+  const compSrc = compSource
+    ? `  var srcComp = app.project.items.addComp(${JSON.stringify(compSource.name)}, 640, 360, 1, 6, 30);
+  srcComp.layers.addSolid([${parseInt(compSource.hex.slice(0, 2), 16) / 255}, ${parseInt(compSource.hex.slice(2, 4), 16) / 255}, ${parseInt(compSource.hex.slice(4, 6), 16) / 255}], 'color', 640, 360, 1, 6);
+  var wallData = WALLMAKER_JSON.parse((function () { var f = new File(${JSON.stringify(wallPath)}); f.encoding = 'UTF-8'; f.open('r'); var t = f.read(); f.close(); return t; })());
+  var lastV = wallData.videos.length - 1;
+  wallData.videos[lastV] = { compId: srcComp.id, name: ${JSON.stringify(compSource.name)} };
+  (function () { var f = new File(${JSON.stringify(wallPath)}); f.encoding = 'UTF-8'; f.open('w'); f.write(WALLMAKER_JSON.stringify(wallData)); f.close(); })();
+`
+    : ''
   let probes = ''
   let snaps = ''
   for (const t of times) {
@@ -113,7 +144,7 @@ function WRITE(name, s) {
 try {
   try { app.project.close(CloseOptions.DO_NOT_SAVE_CHANGES); } catch (e) {}
   app.newProject();
-  WALLMAKER.begin(${j({ jsonPath: wallPath, folder: dir })});
+${compSrc}  WALLMAKER.begin(${j({ jsonPath: wallPath, folder: dir })});
   var guard = 0;
   while (guard++ < 1000) {
     var s = WALLMAKER_JSON.parse(WALLMAKER.step('{"count":25}'));

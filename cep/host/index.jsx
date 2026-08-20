@@ -63,6 +63,7 @@ $.global.WALLMAKER = (function () {
   var VERSION = '1.0.0';
   var TAG = 'wallmaker';
   var CTL = 'Wallmaker Controls'; // the null everything is parented to; its sliders drive the expressions
+  var FOCUS = 'Wallmaker Focus'; // optional spotlight null: nearby screens zoom, far ones dim
   var J = WALLMAKER_JSON;
   var st = null; // current build state
 
@@ -165,7 +166,23 @@ $.global.WALLMAKER = (function () {
         turnOnSnippet(screen.th) +
         'if (dt < 0) { e = 0; } else { var c1 = 1.70158; var c3 = c1 + 1; e = 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); if (e < 0) e = 0; }\n';
     }
-    body += '[' + bsx + ' * m * e, ' + bsy + ' * m * e]';
+    if (st.data.focus) {
+      body +=
+        'var fz = 1;\n' +
+        'try {\n' +
+        '  var FL = thisComp.layer(' + q(FOCUS) + ');\n' +
+        '  var FR = Math.max(1, C(' + q('Focus radius (px)') + ', ' + num(st.data.focus.radius, 400) + '));\n' +
+        '  var FZ = C(' + q('Focus zoom (%)') + ', ' + num(st.data.focus.zoom, 135) + ') / 100;\n' +
+        '  var dv = transform.position - FL.transform.position;\n' +
+        '  var dd = Math.sqrt(dv[0] * dv[0] + dv[1] * dv[1]);\n' +
+        '  var fk = Math.max(0, 1 - dd / FR);\n' +
+        '  fk = fk * fk * (3 - 2 * fk);\n' +
+        '  fz = 1 + (FZ - 1) * fk;\n' +
+        '} catch (eF) {}\n';
+      body += '[' + bsx + ' * m * e * fz, ' + bsy + ' * m * e * fz]';
+    } else {
+      body += '[' + bsx + ' * m * e, ' + bsy + ' * m * e]';
+    }
     return body;
   }
 
@@ -194,7 +211,37 @@ $.global.WALLMAKER = (function () {
     } else {
       body += '  on = 1;\n'; // cut / pop (pop animates on scale)
     }
-    body += '}\non * OP';
+    body += '}\n';
+    body +=
+      'if (on >= 1) {\n' +
+      '  var DR = C(' + q('Dropouts (%)') + ', ' + num(r.dropouts, 0) + ');\n' +
+      '  if (DR > 0) {\n' +
+      '    var blk = Math.floor(time);\n' +
+      '    seedRandom(' + screen.i + ' * 577 + blk * 131, true);\n' +
+      '    if (random() < DR / 100 * 0.6) {\n' +
+      '      var bs = blk + random() * 0.8;\n' +
+      '      var bl = 0.06 + random() * 0.18;\n' +
+      '      if (time >= bs && time <= bs + bl) on = 0;\n' +
+      '    }\n' +
+      '  }\n' +
+      '}\n';
+    if (st.data.focus) {
+      body +=
+        'var fd = 1;\n' +
+        'try {\n' +
+        '  var FL = thisComp.layer(' + q(FOCUS) + ');\n' +
+        '  var FR = Math.max(1, C(' + q('Focus radius (px)') + ', ' + num(st.data.focus.radius, 400) + '));\n' +
+        '  var DM = C(' + q('Focus dim (%)') + ', ' + num(st.data.focus.dim, 0) + ') / 100;\n' +
+        '  var dv = transform.position - FL.transform.position;\n' +
+        '  var dd = Math.sqrt(dv[0] * dv[0] + dv[1] * dv[1]);\n' +
+        '  var fk = Math.max(0, 1 - dd / FR);\n' +
+        '  fk = fk * fk * (3 - 2 * fk);\n' +
+        '  fd = 1 - Math.min(1, Math.max(0, DM)) * (1 - fk);\n' +
+        '} catch (eF) {}\n' +
+        'on * OP * fd';
+    } else {
+      body += 'on * OP';
+    }
     return body;
   }
 
@@ -292,7 +339,31 @@ $.global.WALLMAKER = (function () {
     addSlider(fx, 'Screens opacity (%)', 100);
     if (d.labels) addSlider(fx, 'Label opacity (%)', 100);
     if (d.bg.mode === 'static') addSlider(fx, 'Static brightness (%)', num(d.bg.staticBrightness, 14));
+    if (d.reveal.dropouts > 0) addSlider(fx, 'Dropouts (%)', num(d.reveal.dropouts, 0));
+    if (d.borders) addSlider(fx, 'Border (px)', num(d.borders.width, 2));
+    if (d.scanlines) addSlider(fx, 'Scanlines (%)', num(d.scanlines.strength, 25));
+    if (d.focus) {
+      addSlider(fx, 'Focus radius (px)', num(d.focus.radius, 400));
+      addSlider(fx, 'Focus zoom (%)', num(d.focus.zoom, 135));
+      addSlider(fx, 'Focus dim (%)', num(d.focus.dim, 0));
+    }
     return ctl;
+  }
+
+  /** The draggable spotlight null (only when the feature is on). Kept across rebuilds like the Controls null. */
+  function ensureFocusNull(comp) {
+    if (!st.data.focus) return null;
+    for (var i = 1; i <= comp.numLayers; i++) {
+      var l = comp.layer(i);
+      if (isOurs(l) && l.comment.indexOf(TAG + '-focus') === 0) return l;
+    }
+    var f = comp.layers.addNull(comp.duration);
+    f.name = FOCUS;
+    f.comment = TAG + '-focus';
+    f.parent = st.ctl;
+    tf(f).property('ADBE Anchor Point').setValue([0, 0]);
+    tf(f).property('ADBE Position').setValue([0, 0]);
+    return f;
   }
 
   // ---------------------------------------------------------------- footage
@@ -326,6 +397,18 @@ $.global.WALLMAKER = (function () {
     return rec;
   }
 
+  /** A comp from the user's project used as a screen source (never moved / reinterpreted). */
+  function sourceComp(vid) {
+    var key = 'comp:' + vid.compId;
+    if (st.footage[key]) return st.footage[key];
+    var it = app.project.itemByID(vid.compId);
+    if (!it || !(it instanceof CompItem)) throw new Error('comp not found in this project');
+    if (it === st.main || isOurs(it)) throw new Error('a Wallmaker comp cannot be its own source');
+    var rec = { item: it, srcDur: Math.max(0.01, it.duration), isComp: true };
+    st.footage[key] = rec;
+    return rec;
+  }
+
   /** On a rebuild, reuse footage already sitting in our folder instead of importing again. */
   function indexExistingFootage() {
     if (!st.footFolder) return;
@@ -345,10 +428,10 @@ $.global.WALLMAKER = (function () {
     var d = st.data;
     var s = d.screens[idx];
     var vid = d.videos[s.v];
-    var path = vid.path;
     var rec;
     try {
-      rec = importVideo(path);
+      rec = vid.compId ? sourceComp(vid) : importVideo(vid.path);
+      if (!rec.isComp && !rec.item.hasVideo) throw new Error('no video track');
     } catch (e) {
       st.skipped.push(vid.name + ' (' + String(e && e.message ? e.message : e) + ')');
       return;
@@ -356,8 +439,9 @@ $.global.WALLMAKER = (function () {
     var it = rec.item;
     var sw = Math.max(1, it.width);
     var sh = Math.max(1, it.height);
-    var cw = d.grid.cellW;
-    var ch = d.grid.cellH;
+    var span = Math.max(1, num(s.span, 1));
+    var cw = d.grid.cellW * span + d.grid.gap * (span - 1);
+    var ch = d.grid.cellH * span + d.grid.gap * (span - 1);
     var sx, sy;
     if (d.fill === 'stretch') {
       sx = cw / sw;
@@ -376,12 +460,30 @@ $.global.WALLMAKER = (function () {
     if (rec.srcDur > 0 && s.offset > 0) {
       off = Math.round(s.offset * rec.srcDur * d.fps) / d.fps;
     }
-    layer.startTime = -off;
-    if (!it.mainSource.isStill) {
+    if (rec.isComp) {
+      // comps can't loop through footage interpretation -- remap time instead.
+      // NOTE: time remap must be enabled BEFORE extending outPoint, or AE clamps it to the source span.
       try {
+        if (d.loop || off > 0) {
+          layer.timeRemapEnabled = true;
+          var trP = layer.property('ADBE Time Remapping');
+          if (d.loop) {
+            trP.expression = '(' + off + ' + time) % ' + Math.max(0.01, rec.srcDur - 1 / d.fps) + ';';
+          } else {
+            trP.expression = 'Math.min(' + Math.max(0, rec.srcDur - 1 / d.fps) + ', ' + off + ' + time);';
+          }
+        }
         layer.inPoint = 0;
-        layer.outPoint = Math.min(d.durationSec, Math.max(0.01, it.duration - off));
-      } catch (e) {}
+        layer.outPoint = d.loop ? d.durationSec : Math.min(d.durationSec, Math.max(1 / d.fps, rec.srcDur - off));
+      } catch (eTR) {}
+    } else {
+      layer.startTime = -off;
+      if (!it.mainSource.isStill) {
+        try {
+          layer.inPoint = 0;
+          layer.outPoint = Math.min(d.durationSec, Math.max(0.01, it.duration - off));
+        } catch (e) {}
+      }
     }
     if (d.mute) {
       try {
@@ -397,9 +499,11 @@ $.global.WALLMAKER = (function () {
     addCropMask(layer, x0, y0, x0 + vw, y0 + vh, d.cornerRadius / sx, d.cornerRadius / sy);
     layer.parent = st.ctl;
     tf(layer).property('ADBE Anchor Point').setValue([sw / 2, sh / 2]);
+    var rowF = s.row + (span - 1) / 2;
+    var colF = s.col + (span - 1) / 2;
     var posP = tf(layer).property('ADBE Position');
-    posP.setValue([(s.col - (d.grid.cols - 1) / 2) * (cw + d.grid.gap), (s.row - (d.grid.rows - 1) / 2) * (ch + d.grid.gap)]);
-    posP.expression = positionExpr(s.row, s.col);
+    posP.setValue([(colF - (d.grid.cols - 1) / 2) * (d.grid.cellW + d.grid.gap), (rowF - (d.grid.rows - 1) / 2) * (d.grid.cellH + d.grid.gap)]);
+    posP.expression = positionExpr(rowF, colF);
     var sclP = tf(layer).property('ADBE Scale');
     sclP.setValue([sx * 100, sy * 100]);
     sclP.expression = scaleExpr(sx * 100, sy * 100, s);
@@ -495,6 +599,107 @@ $.global.WALLMAKER = (function () {
     st.staticLayer = l;
   }
 
+  /** One shape layer for every cell frame: a stroked rect + two repeaters (cols x rows), all
+   *  live-linked to the Gap slider. Sits UNDER the screens: visible in gaps and on off screens. */
+  function buildBorders() {
+    var d = st.data;
+    if (!d.borders) return;
+    var l = st.main.layers.addShape();
+    l.name = 'Borders';
+    l.comment = TAG + '-borders';
+    l.parent = st.ctl;
+    tf(l).property('ADBE Position').setValue([0, 0]);
+    var contents = l.property('ADBE Root Vectors Group');
+    var lib = exprLib();
+    var gapRef = 'C(' + q('Gap (px)') + ', ' + num(d.grid.gap, 0) + ')';
+    var widthRef = 'C(' + q('Border (px)') + ', ' + num(d.borders.width, 2) + ')';
+    function addCellGroup(name, w, h, posExprBody, copies) {
+      var grp = contents.addProperty('ADBE Vector Group');
+      grp.name = name;
+      var gg = grp.property('ADBE Vectors Group');
+      var rect = gg.addProperty('ADBE Vector Shape - Rect');
+      rect.property('ADBE Vector Rect Size').setValue([w, h]);
+      rect.property('ADBE Vector Rect Position').setValue([0, 0]);
+      rect.property('ADBE Vector Rect Roundness').setValue(num(d.cornerRadius, 0));
+      var stroke = gg.addProperty('ADBE Vector Graphic - Stroke');
+      stroke.property('ADBE Vector Stroke Color').setValue([d.borders.color[0], d.borders.color[1], d.borders.color[2], 1]);
+      stroke.property('ADBE Vector Stroke Width').setValue(num(d.borders.width, 2));
+      try {
+        stroke.property('ADBE Vector Stroke Width').expression = lib + widthRef;
+      } catch (e) {}
+      if (copies) {
+        var rep1 = gg.addProperty('ADBE Vector Filter - Repeater');
+        rep1.property('ADBE Vector Repeater Copies').setValue(d.grid.cols);
+        var rt1 = rep1.property('ADBE Vector Repeater Transform');
+        rt1.property('ADBE Vector Repeater Position').setValue([d.grid.cellW + d.grid.gap, 0]);
+        try {
+          rt1.property('ADBE Vector Repeater Position').expression = lib + '[' + d.grid.cellW + ' + ' + gapRef + ', 0]';
+        } catch (e2) {}
+        var rep2 = gg.addProperty('ADBE Vector Filter - Repeater');
+        rep2.property('ADBE Vector Repeater Copies').setValue(d.grid.rows);
+        var rt2 = rep2.property('ADBE Vector Repeater Transform');
+        rt2.property('ADBE Vector Repeater Position').setValue([0, d.grid.cellH + d.grid.gap]);
+        try {
+          rt2.property('ADBE Vector Repeater Position').expression = lib + '[0, ' + d.grid.cellH + ' + ' + gapRef + ']';
+        } catch (e3) {}
+      }
+      var gt = grp.property('ADBE Vector Transform Group');
+      gt.property('ADBE Vector Position').setValue([0, 0]);
+      try {
+        gt.property('ADBE Vector Position').expression = lib + posExprBody;
+      } catch (e4) {}
+      return grp;
+    }
+    // the base grid: copy (0,0) sits at cell (0,0)'s center
+    addCellGroup(
+      'cells',
+      d.grid.cellW,
+      d.grid.cellH,
+      'var g = ' + gapRef + ';\n[-(' + ((d.grid.cols - 1) / 2) + ') * (' + d.grid.cellW + ' + g), -(' + ((d.grid.rows - 1) / 2) + ') * (' + d.grid.cellH + ' + g)]',
+      true
+    );
+    // hero outlines (block frames around 2x2 monitors)
+    for (var i = 0; i < d.screens.length; i++) {
+      var sc = d.screens[i];
+      if (num(sc.span, 1) < 2) continue;
+      var hw = d.grid.cellW * sc.span + d.grid.gap * (sc.span - 1);
+      var hh = d.grid.cellH * sc.span + d.grid.gap * (sc.span - 1);
+      var rowF = sc.row + (sc.span - 1) / 2;
+      var colF = sc.col + (sc.span - 1) / 2;
+      addCellGroup(
+        'hero ' + (i + 1),
+        hw,
+        hh,
+        'var g = ' + gapRef + ';\n[(' + colF + ' - ' + ((d.grid.cols - 1) / 2) + ') * (' + d.grid.cellW + ' + g), (' + rowF + ' - ' + ((d.grid.rows - 1) / 2) + ') * (' + d.grid.cellH + ' + g)]',
+        false
+      );
+    }
+    st.bordersLayer = l;
+  }
+
+  /** CRT scanlines: a black wall-sized solid with Venetian Blinds, opacity on a live slider. */
+  function buildScanlines() {
+    var d = st.data;
+    if (!d.scanlines) return;
+    var w = Math.max(4, Math.round(d.grid.wallW));
+    var h = Math.max(4, Math.round(d.grid.wallH));
+    var l = st.main.layers.addSolid([0, 0, 0], 'Scanlines', w, h, 1, st.main.duration);
+    l.comment = TAG + '-scanlines';
+    try {
+      l.source.parentFolder = st.root;
+    } catch (e) {}
+    l.parent = st.ctl;
+    tf(l).property('ADBE Position').setValue([0, 0]);
+    try {
+      var fx = l.property('ADBE Effect Parade').addProperty('ADBE Venetian Blinds');
+      fx.property('Transition Completion').setValue(50);
+      fx.property('Direction').setValue(0);
+      fx.property('Width').setValue(3);
+    } catch (e2) {}
+    tf(l).property('ADBE Opacity').expression = exprLib() + 'C(' + q('Scanlines (%)') + ', ' + num(d.scanlines.strength, 25) + ')';
+    st.scanLayer = l;
+  }
+
   // ---------------------------------------------------------------- build flow
 
   function findRoot(buildKey) {
@@ -527,6 +732,9 @@ $.global.WALLMAKER = (function () {
         bgLayer: null,
         staticLayer: null,
         labelTpl: null,
+        bordersLayer: null,
+        scanLayer: null,
+        focusNull: null,
         padWidth: String(data.screens.length).length > 2 ? String(data.screens.length).length : 2
       };
       var root = findRoot(data.buildKey);
@@ -547,19 +755,25 @@ $.global.WALLMAKER = (function () {
       }
       indexExistingFootage();
 
-      // the main comp: reuse the item on a rebuild (it stays valid wherever it is already used)
+      // the main comp: reuse the item on a rebuild (it stays valid wherever it is already used,
+      // even if the user moved it out of our folder) -- found by its tagged comment, not its name
       var main = null;
-      for (var j = 1; j <= root.numItems; j++) {
-        var c = root.item(j);
-        if (c instanceof CompItem && c.comment === TAG + '-comp') {
+      var itemsAll = app.project.items;
+      for (var j = 1; j <= itemsAll.length; j++) {
+        var c = itemsAll[j];
+        if (c instanceof CompItem && c.comment === TAG + '-comp ' + data.buildKey) {
           main = c;
           break;
         }
       }
+      if (!main) {
+        var clash = findCompByName(data.compName);
+        if (clash && !isOurs(clash)) throw new Error('A comp named "' + data.compName + '" already exists in this project (not built by Wallmaker). Pick another comp name.');
+      }
       var dur = Math.max(1 / data.fps, data.durationSec);
       if (!main) {
         main = app.project.items.addComp(data.compName, data.frame.w, data.frame.h, 1, dur, data.fps);
-        main.comment = TAG + '-comp';
+        main.comment = TAG + '-comp ' + data.buildKey;
         main.parentFolder = root;
       } else {
         main.name = data.compName;
@@ -570,13 +784,15 @@ $.global.WALLMAKER = (function () {
         // wipe our previous layers; keep the controls null (its values/keyframes) and any user-added layers
         for (var k = main.numLayers; k >= 1; k--) {
           var l = main.layer(k);
-          if (isOurs(l) && l.comment.indexOf(TAG + '-controls') !== 0) l.remove();
+          if (isOurs(l) && l.comment.indexOf(TAG + '-controls') !== 0 && l.comment.indexOf(TAG + '-focus') !== 0) l.remove();
         }
       }
       main.bgColor = [data.bg.color[0], data.bg.color[1], data.bg.color[2]];
       st.main = main;
       st.ctl = ensureControls(main);
+      st.focusNull = ensureFocusNull(main);
       buildBackground();
+      buildBorders();
       return reply({ total: data.screens.length });
     } finally {
       app.endUndoGroup();
@@ -606,8 +822,20 @@ $.global.WALLMAKER = (function () {
     try {
       var d = st.data;
       if (st.labelTpl) st.labelTpl.remove();
+      buildScanlines();
+      // bottom to top: Background, Static, Borders, screens & labels, Scanlines, Focus, Controls
+      if (st.bordersLayer) st.bordersLayer.moveToEnd();
       if (st.staticLayer) st.staticLayer.moveToEnd();
       if (st.bgLayer) st.bgLayer.moveToEnd();
+      if (st.scanLayer) st.scanLayer.moveToBeginning();
+      if (st.focusNull) st.focusNull.moveToBeginning();
+      if (!st.data.focus) {
+        // the feature was switched off on a rebuild: drop the stale focus null
+        for (var fi = st.main.numLayers; fi >= 1; fi--) {
+          var fl = st.main.layer(fi);
+          if (isOurs(fl) && fl.comment.indexOf(TAG + '-focus') === 0) fl.remove();
+        }
+      }
       if (st.ctl) st.ctl.moveToBeginning();
       // drop footage that no build uses any more (e.g. a rebuild with a different set of videos)
       if (st.footFolder) {
@@ -645,6 +873,22 @@ $.global.WALLMAKER = (function () {
   }
 
   // ---------------------------------------------------------------- info / testing
+
+  /** What's selected in the Project panel, as wall sources: video files + comps (never our own builds). */
+  function selectedSources() {
+    var files = [];
+    var comps = [];
+    var sel = app.project.selection;
+    for (var i = 0; i < sel.length; i++) {
+      var it = sel[i];
+      if (it instanceof CompItem) {
+        if (!isOurs(it)) comps.push({ id: it.id, name: it.name });
+      } else if (it instanceof FootageItem && it.mainSource && it.mainSource.file && !it.footageMissing && it.hasVideo) {
+        files.push(it.mainSource.file.fsName.replace(/\\/g, '/'));
+      }
+    }
+    return reply({ files: files, comps: comps });
+  }
 
   function info() {
     var f = app.project ? app.project.file : null;
@@ -696,5 +940,5 @@ $.global.WALLMAKER = (function () {
     return reply(out);
   }
 
-  return { info: info, begin: begin, step: step, finish: finish, remove: removeBuild, snapshot: snapshot, probe: probe, version: VERSION };
+  return { info: info, begin: begin, step: step, finish: finish, remove: removeBuild, selectedSources: selectedSources, snapshot: snapshot, probe: probe, version: VERSION };
 })();

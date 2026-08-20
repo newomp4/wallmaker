@@ -23,7 +23,7 @@ export function autoGrid(n: number, compW: number, compH: number, gap: number, m
 
 /** The concrete grid for a config: rows/cols (auto or manual) + cell and wall sizes in px. */
 export function gridFor(cfg: Config): GridSpec {
-  const n = Math.max(1, cfg.videos.length || 12)
+  const n = Math.max(1, cfg.videos.length + cfg.comps.length || 12)
   const { rows, cols } = cfg.gridMode === 'manual' ? { rows: Math.max(1, cfg.rows), cols: Math.max(1, cfg.cols) } : autoGrid(n, cfg.compW, cfg.compH, cfg.gap, cfg.margin)
   const wallW = Math.max(1, cfg.compW - 2 * cfg.margin)
   const wallH = Math.max(1, cfg.compH - 2 * cfg.margin)

@@ -4,7 +4,7 @@
  */
 import type { Config, FillMode, GridSpec, ScreenSpec } from './types'
 import { gridFor } from './grid'
-import { planScreens } from './reveal'
+import { planScreens, withAnimation } from './reveal'
 
 export interface WallScene {
   version: 1
@@ -18,11 +18,14 @@ export interface WallScene {
   fill: FillMode
   cornerRadius: number
   labels: { prefix: string } | null
+  borders: { width: number; color: [number, number, number] } | null
+  scanlines: { strength: number } | null
+  focus: { radius: number; zoom: number; dim: number } | null
   mute: boolean
   loop: boolean
-  reveal: { mode: string; start: number; duration: number; animFrames: number; style: string; deadPct: number; seed: number }
-  videos: { path: string; name: string }[]
-  screens: { i: number; row: number; col: number; v: number; th: number; dead: number; offset: number }[]
+  reveal: { mode: string; start: number; duration: number; animFrames: number; style: string; deadPct: number; dropouts: number; seed: number }
+  videos: { path?: string; compId?: number; name: string }[]
+  screens: { i: number; row: number; col: number; v: number; th: number; dead: number; offset: number; span: number }[]
 }
 
 export function safeCompName(name: string): string {
@@ -49,17 +52,29 @@ function hexToRgb(hex: string): [number, number, number] {
 
 const basename = (p: string) => p.slice(p.replace(/\\/g, '/').lastIndexOf('/') + 1)
 
-export function compileWall(cfg: Config, opts?: { grid?: GridSpec; screens?: ScreenSpec[] }): WallScene {
-  if (!cfg.videos.length) throw new Error('Add at least one video first')
+export function compileWall(rawCfg: Config, opts?: { grid?: GridSpec; screens?: ScreenSpec[] }): WallScene {
+  const cfg = withAnimation(rawCfg)
+  if (!cfg.videos.length && !cfg.comps.length) throw new Error('Add at least one video or comp first')
   const grid = opts?.grid ?? gridFor(cfg)
   const screens = opts?.screens ?? planScreens(cfg, grid)
-  // dedupe file paths — the host imports each file once, screens reference by index
-  const unique: string[] = []
+  // dedupe sources — the host imports each file once, screens reference by index
+  const unique: { path?: string; compId?: number; name: string }[] = []
   const indexOf = new Map<string, number>()
+  const sourceKeys: string[] = []
   for (const p of cfg.videos) {
-    if (!indexOf.has(p)) {
-      indexOf.set(p, unique.length)
-      unique.push(p)
+    const k = 'f:' + p
+    sourceKeys.push(k)
+    if (!indexOf.has(k)) {
+      indexOf.set(k, unique.length)
+      unique.push({ path: p, name: basename(p) })
+    }
+  }
+  for (const c of cfg.comps) {
+    const k = 'c:' + c.id
+    sourceKeys.push(k)
+    if (!indexOf.has(k)) {
+      indexOf.set(k, unique.length)
+      unique.push({ compId: c.id, name: c.name })
     }
   }
   const compName = safeCompName(cfg.compName)
@@ -83,6 +98,9 @@ export function compileWall(cfg: Config, opts?: { grid?: GridSpec; screens?: Scr
     fill: cfg.fill,
     cornerRadius: cfg.cornerRadius,
     labels: cfg.labels ? { prefix: cfg.labelPrefix || 'CAM' } : null,
+    borders: cfg.borders ? { width: cfg.borderWidth, color: hexToRgb(cfg.borderColor) } : null,
+    scanlines: cfg.scanlines ? { strength: cfg.scanStrength } : null,
+    focus: cfg.focus ? { radius: cfg.focusRadius, zoom: cfg.focusZoom, dim: cfg.focusDim } : null,
     mute: cfg.muteAudio,
     loop: cfg.loop,
     reveal: {
@@ -92,9 +110,10 @@ export function compileWall(cfg: Config, opts?: { grid?: GridSpec; screens?: Scr
       animFrames: cfg.screenAnimFrames,
       style: cfg.screenAnim,
       deadPct: cfg.deadPct,
+      dropouts: cfg.dropouts,
       seed: cfg.seed,
     },
-    videos: unique.map((p) => ({ path: p, name: basename(p) })),
-    screens: screens.map((s) => ({ i: s.i, row: s.row, col: s.col, v: indexOf.get(cfg.videos[s.v % cfg.videos.length])!, th: s.th, dead: s.dead, offset: s.offset })),
+    videos: unique,
+    screens: screens.map((s) => ({ i: s.i, row: s.row, col: s.col, v: indexOf.get(sourceKeys[s.v % sourceKeys.length])!, th: s.th, dead: s.dead, offset: s.offset, span: s.span })),
   }
 }

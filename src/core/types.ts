@@ -7,9 +7,17 @@ export type Background = 'dark' | 'static' | 'transparent'
 export type RevealMode = 'none' | 'random' | 'rows' | 'cols' | 'scanline' | 'center' | 'edges' | 'diagonal'
 export type ScreenAnim = 'cut' | 'fade' | 'flicker' | 'pop'
 
+export interface CompRef {
+  /** AE project item id — stable within a project */
+  id: number
+  name: string
+}
+
 export interface Config {
   /** absolute paths of the source videos, in order */
   videos: string[]
+  /** comps from the open AE project used as screens (they render live — no export needed) */
+  comps: CompRef[]
 
   // ---- wall / comp ----
   compName: string
@@ -37,13 +45,26 @@ export interface Config {
   labels: boolean
   labelPrefix: string
 
+  /** monitors that span 2×2 cells (the big screens on a CCTV wall) */
+  heroes: number
+
   // ---- look ----
   background: Background
   bgColor: string
   /** 0..100, opacity of the static-noise underlay ('static' background) */
   staticBrightness: number
+  /** thin frame around every cell — shows in gaps and on screens that are off */
+  borders: boolean
+  borderWidth: number
+  borderColor: string
+  /** CRT scanline overlay across the wall */
+  scanlines: boolean
+  /** 0..100 scanline strength */
+  scanStrength: number
 
   // ---- reveal ----
+  /** master switch: off = every screen is simply on (no animation at all) */
+  animate: boolean
   reveal: RevealMode
   revealStart: number
   revealDuration: number
@@ -54,7 +75,17 @@ export interface Config {
   jitter: number
   /** 0..100 — screens that never turn on */
   deadPct: number
+  /** 0..100 — how often running screens briefly black out */
+  dropouts: number
   seed: number
+
+  // ---- focus spotlight ----
+  /** adds a draggable "Wallmaker Focus" null: nearby screens zoom / far ones dim */
+  focus: boolean
+  focusRadius: number
+  focusZoom: number
+  /** 0..100 how much screens outside the radius are dimmed */
+  focusDim: number
 }
 
 /** One planned screen: where it sits, what it plays and when it comes alive. All deterministic from the seed. */
@@ -70,6 +101,8 @@ export interface ScreenSpec {
   dead: number
   /** start offset as a fraction 0..1 of the source duration */
   offset: number
+  /** cells spanned per axis: 1 = normal, 2 = hero (2×2) */
+  span: number
 }
 
 export interface GridSpec {

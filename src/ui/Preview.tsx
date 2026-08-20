@@ -2,11 +2,12 @@
  * Live wall preview: draws the planned grid on a canvas and plays the reveal using the exact same
  * math (`planScreens` / `screenStateAt`) the AE build bakes into expressions. Inside the panel it
  * also pulls one real frame per video (file:// access is enabled for CEP) as screen thumbnails.
+ * With the Focus spotlight on, moving the mouse over the preview plays the Focus null.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Config } from '../core/types'
-import { gridFor, cellCenter } from '../core/grid'
-import { planScreens, screenStateAt } from '../core/reveal'
+import { gridFor } from '../core/grid'
+import { planScreens, screenStateAt, withAnimation } from '../core/reveal'
 import { isCEP } from '../ae/cep'
 
 // ---- thumbnail cache (module-level: survives tab switches) ----
@@ -81,13 +82,21 @@ function hashHue(s: string): number {
   return (h >>> 0) % 360
 }
 
-export function Preview({ cfg }: { cfg: Config }) {
+function smoothstep(k: number): number {
+  const c = Math.max(0, Math.min(1, k))
+  return c * c * (3 - 2 * c)
+}
+
+export function Preview({ cfg: rawCfg }: { cfg: Config }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const mouse = useRef<{ x: number; y: number } | null>(null)
   const [t, setT] = useState(0)
   const [playing, setPlaying] = useState(true)
   const [, setVersion] = useState(0)
+  const cfg = useMemo(() => withAnimation(rawCfg), [rawCfg])
   const grid = useMemo(() => gridFor(cfg), [cfg])
   const screens = useMemo(() => planScreens(cfg, grid), [cfg, grid])
+  const sourceCount = cfg.videos.length + cfg.comps.length
 
   useEffect(() => {
     bumpVersion = () => setVersion((v) => v + 1)
@@ -126,12 +135,14 @@ export function Preview({ cfg }: { cfg: Config }) {
     return () => cancelAnimationFrame(raf)
   }, [playing, cfg.durationSec])
 
+  // focus hover needs continuous redraws even when paused
+  const [hoverTick, setHoverTick] = useState(0)
+
   // draw
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const maxW = 1280
-    const scale = Math.min(1, maxW / cfg.compW)
+    const scale = Math.min(1, 1280 / cfg.compW, 900 / cfg.compH)
     const W = Math.round(cfg.compW * scale)
     const H = Math.round(cfg.compH * scale)
     if (canvas.width !== W) canvas.width = W
@@ -144,34 +155,61 @@ export function Preview({ cfg }: { cfg: Config }) {
     }
     const cw = grid.cellW * scale
     const ch = grid.cellH * scale
+    const gap = cfg.gap * scale
     const cx0 = W / 2
     const cy0 = H / 2
-    const radius = Math.min(cfg.cornerRadius * scale, cw / 2, ch / 2)
+    const baseRadius = cfg.cornerRadius * scale
+    const focus = cfg.focus && mouse.current ? mouse.current : null
+
+    // borders sit under the screens: visible in gaps and where screens are off
+    if (cfg.borders && cw > 7 && ch > 7) {
+      ctx.strokeStyle = /^#[0-9a-f]{6}$/i.test(cfg.borderColor) ? cfg.borderColor : '#2a2a30'
+      ctx.lineWidth = Math.max(0.75, cfg.borderWidth * scale)
+      for (const s of screens) {
+        const w = cw * s.span + gap * (s.span - 1)
+        const h = ch * s.span + gap * (s.span - 1)
+        const px = cx0 + (s.col + (s.span - 1) / 2 - (grid.cols - 1) / 2) * (cw + gap)
+        const py = cy0 + (s.row + (s.span - 1) / 2 - (grid.rows - 1) / 2) * (ch + gap)
+        rr(ctx, px - w / 2, py - h / 2, w, h, Math.min(baseRadius, w / 2, h / 2))
+        ctx.stroke()
+      }
+    }
+
     const showLabels = cfg.labels && cw >= 42 && ch >= 26
+    const pad = (n: number) => String(n).padStart(String(screens.length).length > 2 ? String(screens.length).length : 2, '0')
     for (const s of screens) {
       const st = screenStateAt(t, s, cfg)
-      const { x, y } = cellCenter(s.row, s.col, grid, cfg.gap)
-      const px = cx0 + x * scale
-      const py = cy0 + y * scale
-      // faint dark panel where the screen is off ('static' hints at noise)
-      if (st.opacity <= 0.01 || st.scale <= 0.01) {
+      const w0 = cw * s.span + gap * (s.span - 1)
+      const h0 = ch * s.span + gap * (s.span - 1)
+      const px = cx0 + (s.col + (s.span - 1) / 2 - (grid.cols - 1) / 2) * (cw + gap)
+      const py = cy0 + (s.row + (s.span - 1) / 2 - (grid.rows - 1) / 2) * (ch + gap)
+      let opacity = st.opacity
+      let sc = st.scale
+      if (focus) {
+        const dd = Math.hypot(px - focus.x, py - focus.y)
+        const k = smoothstep(1 - dd / Math.max(1, cfg.focusRadius * scale))
+        sc *= 1 + (cfg.focusZoom / 100 - 1) * k
+        opacity *= 1 - Math.min(1, cfg.focusDim / 100) * (1 - k)
+      }
+      if (opacity <= 0.01 || sc <= 0.01) {
         if (cfg.background === 'static') {
           ctx.fillStyle = 'rgba(128,128,128,' + (0.006 * cfg.staticBrightness).toFixed(3) + ')'
-          rr(ctx, px - cw / 2, py - ch / 2, cw, ch, radius)
+          rr(ctx, px - w0 / 2, py - h0 / 2, w0, h0, Math.min(baseRadius, w0 / 2, h0 / 2))
           ctx.fill()
         }
         continue
       }
-      const sc = st.scale
-      const w = cw * sc
-      const h = ch * sc
+      const w = w0 * sc
+      const h = h0 * sc
+      const radius = Math.min(baseRadius * sc, w / 2, h / 2)
       ctx.save()
-      ctx.globalAlpha = st.opacity
-      rr(ctx, px - w / 2, py - h / 2, w, h, radius * sc)
+      ctx.globalAlpha = Math.min(1, opacity)
+      rr(ctx, px - w / 2, py - h / 2, w, h, radius)
       ctx.clip()
-      const thumb = thumbs.get(cfg.videos[s.v % Math.max(1, cfg.videos.length)] ?? '')
+      const isComp = s.v >= cfg.videos.length
+      const srcName = isComp ? (cfg.comps[s.v - cfg.videos.length]?.name ?? 'comp') : (cfg.videos[s.v] ?? String(s.v))
+      const thumb = isComp ? undefined : thumbs.get(cfg.videos[s.v] ?? '')
       if (thumb && typeof thumb !== 'string') {
-        // same cover/contain/stretch math as the build
         const sw = thumb.width
         const sh = thumb.height
         let dw = w
@@ -187,42 +225,88 @@ export function Preview({ cfg }: { cfg: Config }) {
         }
         ctx.drawImage(thumb, px - dw / 2, py - dh / 2, dw, dh)
       } else {
-        const hue = hashHue(cfg.videos[s.v % Math.max(1, cfg.videos.length)] ?? String(s.v))
+        const hue = hashHue(srcName)
         const g = ctx.createLinearGradient(px - w / 2, py - h / 2, px + w / 2, py + h / 2)
-        g.addColorStop(0, `hsl(${hue} 42% 38%)`)
-        g.addColorStop(1, `hsl(${(hue + 40) % 360} 45% 22%)`)
+        g.addColorStop(0, `hsl(${hue} ${isComp ? 30 : 42}% ${isComp ? 30 : 38}%)`)
+        g.addColorStop(1, `hsl(${(hue + 40) % 360} ${isComp ? 32 : 45}% ${isComp ? 18 : 22}%)`)
         ctx.fillStyle = g
         ctx.fillRect(px - w / 2, py - h / 2, w, h)
+        if (isComp && w >= 46 && h >= 24) {
+          ctx.fillStyle = 'rgba(255,255,255,.7)'
+          ctx.font = `${Math.max(8, Math.round(Math.min(h * 0.16, 13)))}px -apple-system, sans-serif`
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.fillText(srcName.slice(0, Math.floor(w / 7)), px, py)
+          ctx.textAlign = 'start'
+        }
       }
       if (showLabels) {
         ctx.fillStyle = 'rgba(255,255,255,.85)'
         ctx.font = `${Math.max(8, Math.round(ch * 0.13))}px ui-monospace, Menlo, monospace`
         ctx.textBaseline = 'bottom'
-        ctx.fillText(`${cfg.labelPrefix || 'CAM'} ${String(s.i + 1).padStart(String(screens.length).length > 2 ? String(screens.length).length : 2, '0')}`, px - w / 2 + ch * 0.07, py + h / 2 - ch * 0.05)
+        ctx.fillText(`${cfg.labelPrefix || 'CAM'} ${pad(s.i + 1)}`, px - w / 2 + ch * 0.07, py + h / 2 - ch * 0.05)
       }
       ctx.restore()
     }
-  }, [cfg, grid, screens, t])
+
+    // scanlines across the whole wall
+    if (cfg.scanlines && cfg.scanStrength > 0) {
+      const wallW = grid.wallW * scale
+      const wallH = grid.wallH * scale
+      ctx.save()
+      ctx.globalAlpha = (cfg.scanStrength / 100) * 0.55
+      ctx.fillStyle = '#000'
+      const step = Math.max(2, 3 * scale)
+      for (let y = cy0 - wallH / 2; y < cy0 + wallH / 2; y += step * 2) {
+        ctx.fillRect(cx0 - wallW / 2, y, wallW, step)
+      }
+      ctx.restore()
+    }
+  }, [cfg, grid, screens, t, hoverTick])
 
   const loaded = cfg.videos.filter((p) => {
     const th = thumbs.get(p)
     return th && typeof th !== 'string'
   }).length
 
+  const replay = () => {
+    setT(0)
+    setPlaying(true)
+  }
+
   return (
     <>
       <div className="preview-wrap">
         <div className={'preview-stage' + (cfg.background === 'transparent' ? ' checker' : '')}>
-          <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto' }} />
+          <canvas
+            ref={canvasRef}
+            style={{ maxWidth: '100%', height: 'auto', cursor: cfg.focus ? 'crosshair' : 'default' }}
+            onMouseMove={(e) => {
+              if (!cfg.focus) return
+              const r = e.currentTarget.getBoundingClientRect()
+              const kx = e.currentTarget.width / r.width
+              mouse.current = { x: (e.clientX - r.left) * kx, y: (e.clientY - r.top) * kx }
+              if (!playing) setHoverTick((v) => v + 1)
+            }}
+            onMouseLeave={() => {
+              mouse.current = null
+              if (!playing) setHoverTick((v) => v + 1)
+            }}
+          />
         </div>
         <div className="preview-meta">
-          {grid.rows}×{grid.cols} · {grid.rows * grid.cols} screens · {Math.round(grid.cellW)}×{Math.round(grid.cellH)} px cells
+          {grid.rows}×{grid.cols} · {screens.length} screens · {Math.round(grid.cellW)}×{Math.round(grid.cellH)} px cells
+          {sourceCount > 0 ? ` · ${sourceCount} source${sourceCount === 1 ? '' : 's'}` : ''}
           {cfg.videos.length > 0 && isCEP() ? ` · ${loaded}/${Math.min(cfg.videos.length, 200)} thumbnails` : ''}
+          {cfg.focus ? ' · move the mouse over the wall to play the Focus null' : ''}
         </div>
       </div>
       <div className="transport">
         <button type="button" className={'icon' + (playing ? '' : ' primary')} aria-label={playing ? 'Pause' : 'Play'} onClick={() => setPlaying(!playing)}>
           {playing ? '❚❚' : '▶'}
+        </button>
+        <button type="button" className="icon" aria-label="Replay from the start" title="Replay from the start" onClick={replay}>
+          ⟲
         </button>
         <input type="range" min={0} max={cfg.durationSec} step={1 / cfg.fps} value={Math.min(t, cfg.durationSec)} onChange={(e) => setT(parseFloat(e.target.value))} />
         <span className="time">
@@ -236,5 +320,5 @@ export function Preview({ cfg }: { cfg: Config }) {
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath()
   if (r <= 0.5) ctx.rect(x, y, w, h)
-  else ctx.roundRect(x, y, w, h, r)
+  else ctx.roundRect(x, y, w, h, Math.max(0, r))
 }

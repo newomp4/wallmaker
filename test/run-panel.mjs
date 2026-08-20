@@ -5,7 +5,7 @@
  * and Window ▸ Extensions ▸ Wallmaker open. Uses the panel's window.__wallmaker debug hooks.
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import WebSocket from 'ws'
@@ -25,7 +25,7 @@ const CFG = {
   compName: 'Wallmaker test C',
   compW: 1280, compH: 720, fps: 30, durationSec: 8,
   gridMode: 'auto', gap: 10, margin: 24,
-  fill: 'cover', cornerRadius: 4, assign: 'sequential',
+  fill: 'cover', cornerRadius: 4, assign: 'sequential', animate: true,
   randomStart: true, loop: true, muteAudio: true, labels: false,
   background: 'dark', bgColor: '#0c0c10',
   reveal: 'rows', revealStart: 0.3, revealDuration: 4,
@@ -52,7 +52,11 @@ function send(method, params, timeoutMs = 30000) {
   const id = ++msgId
   return new Promise((res, rej) => {
     const t = setTimeout(() => rej(new Error(`CDP timeout: ${method}`)), timeoutMs)
-    pending.set(id, (m) => { clearTimeout(t); m.error ? rej(new Error(m.error.message)) : res(m.result) })
+    pending.set(id, (m) => {
+      clearTimeout(t)
+      if (m.error) rej(new Error(m.error.message))
+      else res(m.result)
+    })
     ws.send(JSON.stringify({ id, method, params }))
   })
 }
@@ -98,6 +102,8 @@ for (const t of TIMES) {
     await new Promise((r) => setTimeout(r, 250))
   }
 }
+// leave the panel the way a user expects to find it (the test config must not stick around)
+await evalJS('window.__wallmaker.reset()')
 ws.close()
 
 console.log('verifying…')

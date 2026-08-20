@@ -24,7 +24,13 @@ export function sanitize(raw: unknown): Config {
     if (v === undefined) continue
     const d = DEFAULT_CONFIG[k]
     if (Array.isArray(d)) {
-      if (Array.isArray(v) && v.every((x) => typeof x === 'string')) (out as Record<string, unknown>)[k] = v.slice(0, 5000)
+      if (!Array.isArray(v)) continue
+      if (k === 'comps') {
+        const comps = v.filter((x): x is { id: number; name: string } => !!x && typeof x === 'object' && typeof (x as { id?: unknown }).id === 'number' && typeof (x as { name?: unknown }).name === 'string').map((x) => ({ id: x.id, name: x.name }))
+        ;(out as Record<string, unknown>)[k] = comps.slice(0, 5000)
+      } else if (v.every((x) => typeof x === 'string')) {
+        ;(out as Record<string, unknown>)[k] = v.slice(0, 5000)
+      }
     } else if (typeof v === typeof d) {
       const en = ENUMS[k]
       if (en && !en.includes(v as string)) continue

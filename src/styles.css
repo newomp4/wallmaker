@@ -137,3 +137,10 @@ pre.help { background: var(--card); border: 1px solid var(--border2); border-rad
 /* ---------- crash screen ---------- */
 .crash { max-width: 640px; margin: 60px auto; padding: 0 20px; }
 .crash h2 { font-size: 16px; font-weight: 600; margin: 0 0 12px; }
+
+/* ---------- sources drop zone & empty state ---------- */
+.dropzone { border-radius: var(--radius); transition: box-shadow .12s; }
+.dropzone.over { box-shadow: 0 0 0 2px var(--muted) inset; }
+.empty-state { text-align: center; padding: 26px 10px 30px; color: var(--muted); border: 1px dashed var(--border2); border-radius: var(--radius); margin-top: 8px; }
+.empty-state p { margin: 0 0 6px; font-weight: 500; }
+.tag { display: inline-block; background: var(--card2); color: var(--muted); border-radius: 3px; padding: 0 5px; font-size: 10px; font-weight: 600; }

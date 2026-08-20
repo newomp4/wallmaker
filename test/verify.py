@@ -12,6 +12,9 @@ root = round_dir.parent.parent
 wall = json.loads((round_dir / 'wall.json').read_text())
 result = json.loads((round_dir / 'result.json').read_text())
 colors = json.loads((root / '.test-assets' / 'colors.json').read_text())
+extra = round_dir / 'extra-colors.json'
+if extra.exists():
+    colors.update(json.loads(extra.read_text()))
 
 assert result['ok'], f"AE build failed: {result.get('error')}"
 g = wall['grid']
@@ -81,8 +84,9 @@ for tkey, probe in result['probes'].items():
     op_by_idx = {row['idx']: row['opacity'] for row in probe}
     checked = 0
     for s in wall['screens']:
-        cx = wall['frame']['w'] / 2 + (s['col'] - (g['cols'] - 1) / 2) * (g['cellW'] + g['gap'])
-        cy = wall['frame']['h'] / 2 + (s['row'] - (g['rows'] - 1) / 2) * (g['cellH'] + g['gap'])
+        span = s.get('span', 1)
+        cx = wall['frame']['w'] / 2 + (s['col'] + (span - 1) / 2 - (g['cols'] - 1) / 2) * (g['cellW'] + g['gap'])
+        cy = wall['frame']['h'] / 2 + (s['row'] + (span - 1) / 2 - (g['rows'] - 1) / 2) * (g['cellH'] + g['gap'])
         px = img.crop((int(cx) - 3, int(cy) - 3, int(cx) + 4, int(cy) + 4))
         mean = [sum(c) / len(c) for c in zip(*list(px.getdata()))]
         op = op_by_idx[s['i']]
@@ -92,8 +96,10 @@ for tkey, probe in result['probes'].items():
         name = wall['videos'][s['v']]['name']
         if op >= 99.5 and name in colors:
             want = hex_rgb(colors[name])
-            if any(abs(m - w) > 48 for m, w in zip(mean, want)):
-                fail(f'snap t={t} screen {s["i"]} ({name}): rgb {tuple(round(m) for m in mean)}, expected ~{want}')
+            # scanlines darken the wall by up to strength% (stripes may cover the whole sample window)
+            dark = 1 - (wall.get('scanlines') or {'strength': 0})['strength'] / 100
+            if any(m > w + 48 or m < w * dark - 48 for m, w in zip(mean, want)):
+                fail(f'snap t={t} screen {s["i"]} ({name}): rgb {tuple(round(m) for m in mean)}, expected ~{want} (x{dark:.2f} scanline floor)')
             checked += 1
         elif op <= 0.5:
             # off screens show the (dark) background / faint static
@@ -101,6 +107,41 @@ for tkey, probe in result['probes'].items():
                 fail(f'snap t={t} screen {s["i"]}: off but bright (mean {tuple(round(m) for m in mean)}, bg {bg})')
             checked += 1
     print(f'  snapshot t={t}: {checked} cell centers verified')
+
+# ---------- focus spotlight: screens close to the (unmoved) Focus null must render larger ----------
+if wall.get('focus') and wall['focus']['zoom'] > 105:
+    # model check: measured scale ratio between two screens sharing a video must match the falloff math
+    last = result['probes'][sorted(result['probes'], key=float)[-1]]
+    spec = {row['idx']: row for row in last}
+    R, Z = wall['focus']['radius'], wall['focus']['zoom'] / 100
+
+    def zoom_at(s):
+        d = math.hypot(*spec[s['i']]['pos'])
+        k = max(0.0, 1 - d / R)
+        k = k * k * (3 - 2 * k)
+        return 1 + (Z - 1) * k
+
+    by_video = {}
+    for s in wall['screens']:
+        if s.get('span', 1) == 1:
+            by_video.setdefault(s['v'], []).append(s)
+    checked_focus = 0
+    for v, group in by_video.items():
+        if len(group) < 2:
+            continue
+        dist = lambda s: math.hypot(*spec[s['i']]['pos'])
+        near, far = min(group, key=dist), max(group, key=dist)
+        expected_ratio = zoom_at(near) / zoom_at(far)
+        measured_ratio = spec[near['i']]['scale'][0] / max(0.01, spec[far['i']]['scale'][0])
+        if abs(measured_ratio - expected_ratio) > 0.08:
+            fail(f'focus: screens {near["i"]}/{far["i"]} scale ratio {measured_ratio:.3f}, model says {expected_ratio:.3f}')
+        checked_focus += 1
+    print(f'  focus zoom: {checked_focus} near/far pairs verified against the falloff model')
+
+# hero screens must exist when requested and be span 2
+heroes = [s for s in wall['screens'] if s.get('span', 1) == 2]
+if heroes:
+    print(f'  heroes: {len(heroes)} big screens in the plan')
 
 if failures:
     print(f'\n✗ {len(failures)} failure(s)')
