@@ -22,9 +22,10 @@ expressions mirror `screenStateAt()`. Change one side and you change both — th
 | `src/ae/cep.ts` | CEP bridge: evalScript, file IO, folder listing (no-op outside AE) |
 | `src/ae/build.ts` | begin → step… → finish batching (evalScript blocks the panel thread; small batches keep it responsive) |
 | `cep/host/index.jsx` | ★ ES3 host: imports footage, builds screens/masks/labels, writes the expressions |
-| `test/run-host.mjs` | rounds A & B: build via AppleScript `DoScript` into the running AE, then verify |
+| `test/run-host.mjs` | rounds A, B, D: build via AppleScript `DoScript` into the running AE, then verify |
+| `test/run-rebuild.mjs` | round E: build → user customizes → rebuild in place → remove; asserts nothing is lost or duplicated |
 | `test/run-panel.mjs` | round C: drives the real panel over the CEF debug port (8724) |
-| `test/verify.py` | asserts probes (post-expression opacity per screen) and snapshot pixels vs the plan |
+| `test/verify.py` | asserts probes (post-expression opacity per screen) and snapshot pixels vs the plan — including a model check of the Focus falloff |
 
 ## The expressions
 
@@ -34,7 +35,11 @@ Every screen layer gets Position / Scale / Opacity expressions that read sliders
 - Position: `(col - (cols-1)/2) * (cellW + Gap)` — live `Gap (px)`.
 - Opacity: threshold `th` (baked per screen) → on-time `= Reveal start + th/100 * Reveal duration`;
   then cut / fade / flicker (seedRandom per frame) / pop.
-- Dead: baked random rank vs the live `Dead screens (%)` slider.
+- Dead: baked random rank vs the live `Dead screens (%)` slider; dropouts hash a per-second block
+  through `seedRandom`. The Focus null factors in as a smoothstep falloff on scale and opacity.
+- Comp sources loop through a time-remap **expression** (`(off + time) % srcDur`) — footage
+  interpretation looping only exists for files. Enable `timeRemapEnabled` BEFORE extending
+  `outPoint`, or AE clamps the layer to the source span (that was a real bug).
 
 The reveal is **time-based** (scrub the timeline and the wall powers on), controls are **live**
 (retime without rebuilding), the **order** is baked (change it in the panel and rebuild).
@@ -50,9 +55,13 @@ with a `sourceText` *expression*, never per-label TextDocument writes).
 
 ```bash
 npm run test:videos   # ffmpeg: 12 solid-color clips + 2 patterned, .test-assets/
-npm run test:host     # rounds A+B — ⚠ closes the current AE project without saving
+npm run test:host     # rounds A+B+D — ⚠ closes the current AE project without saving
+npm run test:rebuild  # round E (rebuild-in-place / remove lifecycle) — same warning
 npm run test:panel    # round C — needs the panel installed & open (npm run cep:install, restart AE)
 ```
+
+Round D covers the feature set (hero 2×2 screens, borders, scanlines, Focus falloff vs the math
+model, and a comp as a source — the runner creates a solid-color comp and swaps it into the plan).
 
 Verification is two-layered: `probe` returns every screen's **post-expression opacity** at a time
 (asserted exactly against the plan), and `snapshot` (saveFrameToPng) frames are checked

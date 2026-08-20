@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Config } from '../core/types'
 import { PRESETS } from '../core/presets'
 import { useConfig } from './useConfig'
@@ -23,6 +23,9 @@ declare global {
 export default function App() {
   const { cfg, patch, reset } = useConfig()
   const [tab, setTab] = useState<Tab>('videos')
+  // two-step reset: blocking dialogs (confirm/alert) are unreliable inside CEP panels
+  const [armReset, setArmReset] = useState(false)
+  const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // debug hooks: lets the automated tests (and the curious) drive the panel from the CEF debug port
   useEffect(() => {
@@ -85,13 +88,20 @@ export default function App() {
           </select>
           <button
             type="button"
-            className="btn"
+            className={'btn' + (armReset ? ' danger' : '')}
             onClick={() => {
-              if (window.confirm('Reset every setting and clear the source list?')) reset()
+              if (armReset) {
+                if (armTimer.current) clearTimeout(armTimer.current)
+                setArmReset(false)
+                reset()
+              } else {
+                setArmReset(true)
+                armTimer.current = setTimeout(() => setArmReset(false), 3000)
+              }
             }}
             title="Back to the default settings (your source list is cleared too)"
           >
-            Reset
+            {armReset ? 'Really reset?' : 'Reset'}
           </button>
         </div>
       </header>

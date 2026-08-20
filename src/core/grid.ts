@@ -32,10 +32,3 @@ export function gridFor(cfg: Config): GridSpec {
   return { rows, cols, cellW, cellH, wallW, wallH }
 }
 
-/** Center of screen (row, col) relative to the wall center — the same math the AE position expressions use. */
-export function cellCenter(row: number, col: number, grid: GridSpec, gap: number): { x: number; y: number } {
-  return {
-    x: (col - (grid.cols - 1) / 2) * (grid.cellW + gap),
-    y: (row - (grid.rows - 1) / 2) * (grid.cellH + gap),
-  }
-}

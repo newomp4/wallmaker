@@ -329,6 +329,11 @@ $.global.WALLMAKER = (function () {
       tf(ctl).property('ADBE Position').setValue([d.frame.w / 2, d.frame.h / 2]);
     }
     ctl.enabled = false; // nulls are invisible anyway; keep the switch off so it never renders
+    try {
+      ctl.startTime = 0;
+      ctl.inPoint = 0;
+      ctl.outPoint = comp.duration; // a kept null must span a comp that grew on rebuild
+    } catch (eSpan) {}
     var fx = ctl.property('ADBE Effect Parade');
     addSlider(fx, 'Reveal start (s)', num(d.reveal.start, 0));
     addSlider(fx, 'Reveal duration (s)', num(d.reveal.duration, 0));
@@ -355,7 +360,14 @@ $.global.WALLMAKER = (function () {
     if (!st.data.focus) return null;
     for (var i = 1; i <= comp.numLayers; i++) {
       var l = comp.layer(i);
-      if (isOurs(l) && l.comment.indexOf(TAG + '-focus') === 0) return l;
+      if (isOurs(l) && l.comment.indexOf(TAG + '-focus') === 0) {
+        try {
+          l.startTime = 0;
+          l.inPoint = 0;
+          l.outPoint = comp.duration;
+        } catch (eSpan2) {}
+        return l;
+      }
     }
     var f = comp.layers.addNull(comp.duration);
     f.name = FOCUS;
@@ -384,12 +396,13 @@ $.global.WALLMAKER = (function () {
    *  loops that any offset still leaves a full comp's worth of media. */
   function prepareFootage(path, it) {
     var srcDur = it.mainSource.isStill ? 0 : it.duration;
-    if (st.data.loop && srcDur > 0) {
+    if (srcDur > 0) {
       try {
         if (it.mainSource.loop > 1) {
           srcDur = srcDur / it.mainSource.loop; // reused from a previous build: duration is already multiplied
         }
-        it.mainSource.loop = Math.max(1, Math.min(9999, Math.ceil((st.data.durationSec + srcDur) / srcDur) + 1));
+        // set the loop we need now -- and RESET a stale loop when looping is off this build
+        it.mainSource.loop = st.data.loop ? Math.max(1, Math.min(9999, Math.ceil((st.data.durationSec + srcDur) / srcDur) + 1)) : 1;
       } catch (e) {}
     }
     var rec = { item: it, srcDur: srcDur };
@@ -403,7 +416,7 @@ $.global.WALLMAKER = (function () {
     if (st.footage[key]) return st.footage[key];
     var it = app.project.itemByID(vid.compId);
     if (!it || !(it instanceof CompItem)) throw new Error('comp not found in this project');
-    if (it === st.main || isOurs(it)) throw new Error('a Wallmaker comp cannot be its own source');
+    if (it === st.main) throw new Error('the wall cannot use itself as a source');
     var rec = { item: it, srcDur: Math.max(0.01, it.duration), isComp: true };
     st.footage[key] = rec;
     return rec;
@@ -564,6 +577,7 @@ $.global.WALLMAKER = (function () {
     bg.comment = TAG + '-bg';
     try {
       bg.source.parentFolder = st.root;
+      bg.source.comment = TAG + '-solid';
     } catch (e) {}
     st.bgLayer = bg;
     if (d.bg.mode === 'static') buildStatic();
@@ -577,6 +591,10 @@ $.global.WALLMAKER = (function () {
     sc.parentFolder = st.root;
     sc.comment = TAG + '-staticcomp';
     var solid = sc.layers.addSolid([0.5, 0.5, 0.5], 'noise', w, h, 1, sc.duration);
+    try {
+      solid.source.parentFolder = st.root;
+      solid.source.comment = TAG + '-solid';
+    } catch (eS) {}
     var fx = solid.property('ADBE Effect Parade').addProperty('ADBE Fractal Noise');
     try {
       fx.property('Contrast').setValue(400);
@@ -687,6 +705,7 @@ $.global.WALLMAKER = (function () {
     l.comment = TAG + '-scanlines';
     try {
       l.source.parentFolder = st.root;
+      l.source.comment = TAG + '-solid';
     } catch (e) {}
     l.parent = st.ctl;
     tf(l).property('ADBE Position').setValue([0, 0]);
@@ -817,7 +836,10 @@ $.global.WALLMAKER = (function () {
   }
 
   function finish() {
-    if (!st) return reply({ compName: '', screens: 0, videos: 0, skipped: [] });
+    if (!st || !st.main) {
+      st = null;
+      return reply({ compName: '', screens: 0, videos: 0, skipped: [] });
+    }
     app.beginUndoGroup('Wallmaker: build (finish)');
     try {
       var d = st.data;
@@ -844,6 +866,15 @@ $.global.WALLMAKER = (function () {
           try {
             if (it instanceof FootageItem && it.usedIn.length === 0) it.remove();
           } catch (e) {}
+        }
+      }
+      // and our solids that a rebuild orphaned (old Background / Scanlines / noise sources)
+      if (st.root) {
+        for (var si = st.root.numItems; si >= 1; si--) {
+          var sit = st.root.item(si);
+          try {
+            if (sit instanceof FootageItem && sit.comment === TAG + '-solid' && sit.usedIn.length === 0) sit.remove();
+          } catch (e3) {}
         }
       }
       var videos = 0;

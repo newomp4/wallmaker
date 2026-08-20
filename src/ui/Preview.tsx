@@ -69,7 +69,7 @@ function loadThumb(path: string): Promise<void> {
       clearTimeout(t)
       done(true)
     }
-    video.src = 'file://' + encodeURI(path).replace(/#/g, '%23')
+    video.src = 'file://' + encodeURI(path).replace(/#/g, '%23').replace(/\?/g, '%3F')
   })
 }
 

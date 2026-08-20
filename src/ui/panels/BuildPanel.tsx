@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Config } from '../../core/types'
 import { gridFor } from '../../core/grid'
+import { planScreens, withAnimation } from '../../core/reveal'
 import { buildKeyFor } from '../../core/scene'
 import { isCEP, hostInfo } from '../../ae/cep'
 import { buildInAE, defaultBuildFolder, hostInfoAE, removeBuild, type AEHostInfo, type AEProgress, type AEBuildResult } from '../../ae/build'
@@ -14,7 +15,8 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
   const [error, setError] = useState('')
   const busy = useRef(false)
   const grid = gridFor(cfg)
-  const n = grid.rows * grid.cols
+  const n = planScreens(withAnimation(cfg), grid).length
+  const heroCount = cfg.heroes > 0 ? planScreens(withAnimation(cfg), grid).filter((s) => s.span === 2).length : 0
   const sources = cfg.videos.length + cfg.comps.length
 
   useEffect(() => {
@@ -77,7 +79,7 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
       <section className="sec">
         <h3>Build</h3>
         <p className="hint">
-          <b>{n - Math.min(cfg.heroes, Math.floor(n / 4)) * 3}</b> screens ({grid.rows}×{grid.cols} cells{cfg.heroes > 0 ? `, ${Math.min(cfg.heroes, Math.floor(n / 4))} big` : ''}) from <b>{sources}</b> source{sources === 1 ? '' : 's'} → comp “<b>{cfg.compName}</b>” · {cfg.compW}×{cfg.compH} · {cfg.durationSec} s @ {cfg.fps} fps
+          <b>{n}</b> screens ({grid.rows}×{grid.cols} cells{heroCount > 0 ? `, ${heroCount} big` : ''}) from <b>{sources}</b> source{sources === 1 ? '' : 's'} → comp “<b>{cfg.compName}</b>” · {cfg.compW}×{cfg.compH} · {cfg.durationSec} s @ {cfg.fps} fps
         </p>
         {host && (
           <p className="hint">

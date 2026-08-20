@@ -2,6 +2,7 @@ import { useState, type DragEvent } from 'react'
 import type { Config, CompRef } from '../../core/types'
 import { VIDEO_EXTENSIONS } from '../../core/defaults'
 import { gridFor } from '../../core/grid'
+import { planScreens, withAnimation } from '../../core/reveal'
 import { isCEP, pickFolder, pickFiles, listVideos, systemPath, callHost } from '../../ae/cep'
 import { Section } from '../controls'
 
@@ -12,6 +13,7 @@ export function SourcesPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<C
   const [selErr, setSelErr] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const grid = gridFor(cfg)
+  const screenCount = planScreens(withAnimation(cfg), grid).length
   const total = cfg.videos.length + cfg.comps.length
 
   const addFolder = () => {
@@ -101,7 +103,7 @@ export function SourcesPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<C
         {selErr && <p className="hint err">{selErr}</p>}
         {total > 0 && (
           <p className="hint">
-            <b>{total}</b> source{total === 1 ? '' : 's'} → <b>{grid.rows * grid.cols}</b> screen{grid.rows * grid.cols === 1 ? '' : 's'}
+            <b>{total}</b> source{total === 1 ? '' : 's'} → <b>{screenCount}</b> screen{screenCount === 1 ? '' : 's'}
             {cfg.gridMode === 'auto' ? ' (grid follows your source count — fix it on the Wall tab)' : ''}
           </p>
         )}
