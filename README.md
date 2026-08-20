@@ -16,7 +16,7 @@ Point it at a folder of videos (or select comps right in your project), choose t
 - **Cell shape lock**: keep every screen 16:9 / 4:3 / 1:1 / 9:16 / custom — the wall centers itself instead of stretching; or fill the comp edge-to-edge.
 - Gap, outer margin, rounded corners. Video fit per screen: Fill (crop), Fit (letterbox) or Stretch.
 - **Arrangements** — one-click grid presets (Auto, Edge to edge, 16:9 cells, 3×3, 4×3, 5×5, Spaced).
-- A **quick bar** under the live preview holds the tune-while-you-watch controls (grid, gap, cell shape, seed) so tweaking never means scrolling.
+- A **quick bar** under the live preview holds the tune-while-you-watch controls (grid, gap, cell shape, seed).
 - Background: one solid color, or nothing at all. Grading, glow and texture belong on your own layers above the wall — this tool does not do looks.
 
 **The camera — the zoom-out**
@@ -52,10 +52,11 @@ Then (re)start After Effects (2024 or newer) → **Window ▸ Extensions ▸ Wal
 
 ## Use
 
-1. **Sources** — add a folder, files, or your Project-panel selection (footage *and* comps).
-2. **Wall** — arrangement, grid, cell shape, gap, fit, background, comp size / fps / duration.
-3. **Motion** — the centered screen, the camera move, and (optionally) the power-on.
-4. **Build** — one click; the comp opens when done.
+1. **Sources** — a folder, files, or your Project-panel selection (footage *and* comps).
+2. **Wall** — arrangement, grid, cell shape, gap, fit, background, comp settings.
+3. **Camera** — the center screen and the zoom.
+4. **Animate** — the power-on (optional).
+5. **Build** — one click; the comp opens when done.
 
 > Power-on animation is **off by default** — the base wall is simply on. Everything animated is opt-in.
 

@@ -210,9 +210,9 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
       if (s.featured && w >= 20) {
         const lw = Math.max(2, 3 * scale * cam.k)
         ctx.save()
-        ctx.strokeStyle = 'rgba(134,239,172,.95)'
+        ctx.strokeStyle = 'rgba(255,255,255,.92)'
         ctx.lineWidth = lw
-        ctx.shadowColor = 'rgba(134,239,172,.55)'
+        ctx.shadowColor = 'rgba(0,0,0,.6)'
         ctx.shadowBlur = 10 * scale * cam.k
         rr(ctx, px - w / 2 + lw / 2, py - h / 2 + lw / 2, w - lw, h - lw, Math.max(0, radius - lw / 2))
         ctx.stroke()
@@ -221,10 +221,7 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
     }
   }, [cfg, grid, screens, camera, t, thumbVersion])
 
-  const loaded = cfg.videos.filter((p) => {
-    const th = thumbs.get(p)
-    return th && typeof th !== 'string'
-  }).length
+  const pending = isCEP() ? cfg.videos.slice(0, 200).filter((p) => !thumbs.has(p) || thumbs.get(p) === 'loading').length : 0
 
   const replay = () => {
     setT(0)
@@ -236,29 +233,15 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
       <div className="preview-wrap">
         {sourceCount === 0 && (
           <div className="stage-empty">
-            <svg width="44" height="44" viewBox="0 0 32 32" aria-hidden>
-              <g fill="currentColor">
-                <rect x="3" y="3" width="7.6" height="7.6" rx="1.4" />
-                <rect x="12.2" y="3" width="7.6" height="7.6" rx="1.4" opacity=".8" />
-                <rect x="21.4" y="3" width="7.6" height="7.6" rx="1.4" opacity=".3" />
-                <rect x="3" y="12.2" width="7.6" height="7.6" rx="1.4" opacity=".5" />
-                <rect x="12.2" y="12.2" width="7.6" height="7.6" rx="1.4" />
-                <rect x="21.4" y="12.2" width="7.6" height="7.6" rx="1.4" opacity=".7" />
-                <rect x="3" y="21.4" width="7.6" height="7.6" rx="1.4" opacity=".2" />
-                <rect x="12.2" y="21.4" width="7.6" height="7.6" rx="1.4" opacity=".6" />
-                <rect x="21.4" y="21.4" width="7.6" height="7.6" rx="1.4" />
-              </g>
-            </svg>
-            <h2>Give the wall something to play</h2>
-            <p>{src.inAE ? 'Add a folder of clips, pick files, use your Project-panel selection — or just drop videos anywhere on this window.' : 'This is the preview — sources, comps and building live inside the After Effects panel.'}</p>
+            <h2>{src.inAE ? 'Add videos or comps' : 'Preview only \u2014 open the panel in After Effects'}</h2>
             <div className="btns">
               {src.inAE ? (
                 <>
                   <button type="button" className="btn primary" onClick={src.addFolder}>
-                    Add a folder…
+                    Folder
                   </button>
                   <button type="button" className="btn" onClick={src.addFiles}>
-                    Add files…
+                    Files
                   </button>
                   <button type="button" className="btn" onClick={src.addSelection}>
                     From selection
@@ -266,7 +249,7 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
                 </>
               ) : (
                 <button type="button" className="btn primary" onClick={src.addSamples}>
-                  Try it with 12 sample clips
+                  Use sample clips
                 </button>
               )}
             </div>
@@ -280,9 +263,9 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
           <canvas ref={canvasRef} />
         </div>
         <div className="preview-meta">
-          {grid.rows}×{grid.cols} · {screens.length} screens · {Math.round(grid.cellW)}×{Math.round(grid.cellH)} px cells
+          {grid.rows}×{grid.cols} · {screens.length} screens · {Math.round(grid.cellW)}×{Math.round(grid.cellH)}
           {sourceCount > 0 ? ` · ${sourceCount} source${sourceCount === 1 ? '' : 's'}` : ''}
-          {cfg.videos.length > 0 && isCEP() ? ` · ${loaded}/${Math.min(cfg.videos.length, 200)} thumbnails` : ''}
+          {pending > 0 ? ` · loading ${pending}` : ''}
         </div>
       </div>
       <QuickBar cfg={rawCfg} patch={patch} />

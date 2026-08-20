@@ -4,14 +4,15 @@ import { useConfig } from './useConfig'
 import { Preview } from './Preview'
 import { SourcesPanel } from './panels/SourcesPanel'
 import { WallPanel } from './panels/WallPanel'
-import { MotionPanel } from './panels/MotionPanel'
+import { CameraPanel } from './panels/CameraPanel'
+import { AnimatePanel } from './panels/AnimatePanel'
 import { BuildPanel } from './panels/BuildPanel'
-import { isCEP, callHost } from '../ae/cep'
+import { callHost } from '../ae/cep'
 import { useSources } from './useSources'
 import { compileWall, buildKeyFor } from '../core/scene'
 import { buildInAE, defaultBuildFolder, hostInfoAE } from '../ae/build'
 
-type Tab = 'videos' | 'wall' | 'motion' | 'ae'
+type Tab = 'videos' | 'wall' | 'camera' | 'animate' | 'ae'
 
 declare global {
   interface Window {
@@ -74,8 +75,8 @@ export default function App() {
         dragDepth.current = 0
         setDragOver(false)
         if (e.dataTransfer.files.length) {
-          if (sourcesApi.addDropped(e.dataTransfer.files)) showToast(`Added dropped video${e.dataTransfer.files.length === 1 ? '' : 's'}.`)
-          else showToast('Could not read dropped file paths here — use “Add files…” instead.')
+          if (sourcesApi.addDropped(e.dataTransfer.files)) showToast(`Added ${e.dataTransfer.files.length} file${e.dataTransfer.files.length === 1 ? '' : 's'}`)
+          else showToast('Could not read those paths — use Files instead')
         }
       }}
     >
@@ -97,7 +98,6 @@ export default function App() {
             </svg>
           </span>
           Wallmaker
-          <span className="sub">{isCEP() ? 'walls of videos, as real AE layers' : 'walls of videos for After Effects'}</span>
         </div>
         <div className="topbtns">
           <button
@@ -113,9 +113,9 @@ export default function App() {
                 armTimer.current = setTimeout(() => setArmReset(false), 3000)
               }
             }}
-            title="Back to the default settings (your source list is cleared too)"
+            title="Back to defaults — clears your sources too"
           >
-            {armReset ? 'Really reset?' : 'Reset'}
+            {armReset ? 'Sure?' : 'Reset'}
           </button>
         </div>
       </header>
@@ -134,7 +134,8 @@ export default function App() {
               [
                 ['videos', `Sources${sources ? ` · ${sources}` : ''}`, TAB_ICONS.videos],
                 ['wall', 'Wall', TAB_ICONS.wall],
-                ['motion', 'Motion', TAB_ICONS.motion],
+                ['camera', 'Camera', TAB_ICONS.camera],
+                ['animate', 'Animate', TAB_ICONS.animate],
                 ['ae', 'Build', TAB_ICONS.ae],
               ] as [Tab, string, ReactNode][]
             ).map(([t, label, icon]) => (
@@ -147,7 +148,8 @@ export default function App() {
           <div className="panel-body">
             {tab === 'videos' && <SourcesPanel cfg={cfg} patch={patch} />}
             {tab === 'wall' && <WallPanel cfg={cfg} patch={patch} />}
-            {tab === 'motion' && <MotionPanel cfg={cfg} patch={patch} />}
+            {tab === 'camera' && <CameraPanel cfg={cfg} patch={patch} />}
+            {tab === 'animate' && <AnimatePanel cfg={cfg} patch={patch} />}
             {tab === 'ae' && <BuildPanel cfg={cfg} />}
           </div>
         </aside>
@@ -171,10 +173,16 @@ const TAB_ICONS = {
       <rect x="8.9" y="8.9" width="5.6" height="5.6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   ),
-  motion: (
+  camera: (
     <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
-      <rect x="1.4" y="4.2" width="9" height="7.6" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="1.4" y="4.2" width="9" height="7.6" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
       <path d="M11.2 8.4 14.5 6v4.8l-3.3-2.4Z" fill="currentColor" />
+    </svg>
+  ),
+  animate: (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+      <path d="M8 1.6v5.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M4.6 3.8a5.6 5.6 0 1 0 6.8 0" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   ),
   ae: (

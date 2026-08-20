@@ -1,7 +1,7 @@
 import type { Config, CellAspect } from '../../core/types'
 import { COMP_PRESETS } from '../../core/defaults'
 import { PRESETS } from '../../core/presets'
-import { gridFor, aspectOf } from '../../core/grid'
+import { gridFor } from '../../core/grid'
 import { ColorInput, Field, NumberInput, Row, Section, Segmented, Select, Slider, TextInput, Toggle } from '../controls'
 
 /** Does a preset describe the layout the config is already in? (so the chip can show as active) */
@@ -11,11 +11,9 @@ function isActive(cfg: Config, patch: Partial<Config>): boolean {
 
 export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Config>) => void }) {
   const grid = gridFor(cfg)
-  const n = grid.rows * grid.cols
-  const aspect = aspectOf(cfg)
   return (
     <>
-      <Section title="Arrangement" hint="A starting point for the grid — it never touches your sources, comp or camera.">
+      <Section title="Arrangement">
         <div className="chips">
           {PRESETS.map((p) => (
             <button key={p.name} type="button" className={'chip' + (isActive(cfg, p.patch) ? ' on' : '')} title={p.hint} onClick={() => patch(p.patch)}>
@@ -24,11 +22,11 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
           ))}
         </div>
       </Section>
-      <Section title="Grid" hint={`${grid.rows} rows × ${grid.cols} columns = ${n} identical ${Math.round(grid.cellW)}×${Math.round(grid.cellH)} px screens`}>
+      <Section title="Grid">
         <Segmented
           value={cfg.gridMode}
           options={[
-            { value: 'auto', label: 'Fit my sources', title: 'One screen per source, rows/columns picked automatically' },
+            { value: 'auto', label: 'Fit sources', title: 'One screen per source; rows and columns picked automatically' },
             { value: 'manual', label: 'Rows × columns' },
           ]}
           onChange={(v) => patch(v === 'manual' ? { gridMode: 'manual', rows: grid.rows, cols: grid.cols } : { gridMode: 'auto' })}
@@ -39,18 +37,11 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
             <NumberInput label="Columns" value={cfg.cols} min={1} max={64} onChange={(v) => patch({ cols: Math.round(v) })} />
           </Row>
         )}
-        <Field
-          label="Cell shape"
-          hint={
-            aspect === null
-              ? 'Cells stretch so the wall covers the comp exactly — their shape follows rows × columns.'
-              : 'Every screen is locked to this ratio and they are all the same size; the wall stays centered in the comp.'
-          }
-        >
+        <Field label="Cell shape">
           <Segmented
             value={cfg.cellAspect}
             options={[
-              { value: 'fill', label: 'Fill comp' },
+              { value: 'fill', label: 'Fill', title: 'Cells stretch so the wall covers the comp exactly' },
               { value: 'wide', label: '16:9' },
               { value: 'tv', label: '4:3' },
               { value: 'square', label: '1:1' },
@@ -60,17 +51,17 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
             onChange={(v: CellAspect) => patch({ cellAspect: v })}
           />
         </Field>
-        {cfg.cellAspect === 'custom' && <NumberInput label="Cell aspect (width ÷ height)" value={cfg.cellAspectCustom} min={0.1} max={10} step={0.01} onChange={(v) => patch({ cellAspectCustom: v })} />}
-        <Slider label="Gap between screens" value={cfg.gap} min={0} max={80} onChange={(v) => patch({ gap: v })} format={(v) => `${v} px`} hint="Also a live “Gap (px)” slider on the Controls null in AE — keyframe it and the screens fly apart." />
-        <Slider label="Outer margin" value={cfg.margin} min={0} max={400} onChange={(v) => patch({ margin: v })} format={(v) => `${v} px`} />
-        <Slider label="Screen corners" value={cfg.cornerRadius} min={0} max={60} onChange={(v) => patch({ cornerRadius: v })} format={(v) => (v === 0 ? 'square' : `${v} px`)} />
+        {cfg.cellAspect === 'custom' && <NumberInput label="Width ÷ height" value={cfg.cellAspectCustom} min={0.1} max={10} step={0.01} onChange={(v) => patch({ cellAspectCustom: v })} />}
+        <Slider label="Gap" value={cfg.gap} min={0} max={80} onChange={(v) => patch({ gap: v })} format={(v) => `${v} px`} />
+        <Slider label="Margin" value={cfg.margin} min={0} max={400} onChange={(v) => patch({ margin: v })} format={(v) => `${v} px`} />
+        <Slider label="Corners" value={cfg.cornerRadius} min={0} max={60} onChange={(v) => patch({ cornerRadius: v })} format={(v) => (v === 0 ? 'square' : `${v} px`)} />
       </Section>
       <Section title="Screens">
         <Field label="Video fit">
           <Segmented
             value={cfg.fill}
             options={[
-              { value: 'cover', label: 'Fill', title: 'Crop to fill the screen (recommended)' },
+              { value: 'cover', label: 'Fill', title: 'Crop to fill the screen' },
               { value: 'contain', label: 'Fit', title: 'Letterbox inside the screen' },
               { value: 'stretch', label: 'Stretch' },
             ]}
@@ -81,29 +72,29 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
           label="Source order"
           value={cfg.assign}
           options={[
-            { value: 'sequential', label: 'In order (repeat if needed)' },
-            { value: 'shuffle', label: 'Shuffled (each source appears evenly)' },
-            { value: 'random', label: 'Random pick per screen' },
+            { value: 'sequential', label: 'In order' },
+            { value: 'shuffle', label: 'Shuffled' },
+            { value: 'random', label: 'Random per screen' },
           ]}
           onChange={(v) => patch({ assign: v })}
         />
-        <Toggle label="Start each screen at a random point in its video" value={cfg.randomStart} onChange={(v) => patch({ randomStart: v })} hint="A wall of the same clip won't look synchronized." />
-        <Toggle label="Loop videos" value={cfg.loop} onChange={(v) => patch({ loop: v })} />
-        <Toggle label="Mute audio" value={cfg.muteAudio} onChange={(v) => patch({ muteAudio: v })} hint="A thousand soundtracks at once is rarely the goal." />
+        <Toggle label="Random start point" value={cfg.randomStart} onChange={(v) => patch({ randomStart: v })} />
+        <Toggle label="Loop" value={cfg.loop} onChange={(v) => patch({ loop: v })} />
+        <Toggle label="Mute" value={cfg.muteAudio} onChange={(v) => patch({ muteAudio: v })} />
       </Section>
-      <Section title="Background" hint="Deliberately plain — grade, glow and texture belong on your own adjustment layers above the wall.">
+      <Section title="Background">
         <Segmented
           value={cfg.background}
           options={[
-            { value: 'solid', label: 'Solid color', title: 'A solid behind the wall — shows in the gaps and where screens are off' },
-            { value: 'transparent', label: 'Transparent', title: 'No background layer — composite the wall over your own' },
+            { value: 'solid', label: 'Solid' },
+            { value: 'transparent', label: 'None', title: 'No background layer — composite the wall over your own' },
           ]}
           onChange={(v) => patch({ background: v })}
         />
-        {cfg.background === 'solid' && <ColorInput label="Background color" value={cfg.bgColor} onChange={(v) => patch({ bgColor: v })} />}
+        {cfg.background === 'solid' && <ColorInput label="Color" value={cfg.bgColor} onChange={(v) => patch({ bgColor: v })} />}
       </Section>
       <Section title="Composition">
-        <TextInput label="Comp name" value={cfg.compName} onChange={(v) => patch({ compName: v })} />
+        <TextInput label="Name" value={cfg.compName} onChange={(v) => patch({ compName: v })} />
         <Field label="Size">
           <Segmented
             value={COMP_PRESETS.find((p) => p.w === cfg.compW && p.h === cfg.compH)?.label ?? 'Custom'}
