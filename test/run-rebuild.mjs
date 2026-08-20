@@ -152,12 +152,14 @@ const posOk = (r.probe ?? []).every((row) => {
   return Math.abs(row.pos[0] - ex) < 0.6 && Math.abs(row.pos[1] - ey) < 0.6
 })
 
+const n1 = walls.wall1.screens.length
+const n2 = walls.wall2.screens.length
 const checks = [
-  ['first build: 12 screens', r.fin1.screens === 12],
+  [`first build: ${n1} screens`, r.fin1.screens === n1],
   ['camera wrote the planned zoom keyframes', sameKeys(r.keys1, planKeys(walls.wall1)), `${JSON.stringify(r.keys1)} vs ${JSON.stringify(planKeys(walls.wall1))}`],
   ['the wall null hangs off the camera null at its origin', r.ctlParent === 'Wallmaker Camera' && Math.abs(r.ctlPos[0]) < 0.01 && Math.abs(r.ctlPos[1]) < 0.01],
-  ['second build: 25 screens', r.fin2.screens === 25 && r.screens === 25],
-  ["rebuilt screens sit on wall2's grid (with the user's kept Gap=33)", posOk && (r.probe ?? []).length === 25],
+  [`second build: ${n2} screens`, r.fin2.screens === n2 && r.screens === n2],
+  ["rebuilt screens sit on wall2's grid (with the user's kept Gap=33)", posOk && (r.probe ?? []).length === n2],
   ['comp item identity preserved', r.sameCompId === true],
   ['exactly one comp with that name, one camera null', r.comps === 1 && r.cameras === 1],
   ['no stale label / border / focus layers from older builds', r.stale === 0],

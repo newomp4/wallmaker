@@ -25,6 +25,7 @@ Point it at a folder of videos (or select comps right in your project), choose t
 
 **The camera — the zoom-out**
 - Pick a **centered screen**: one source (file or comp) pinned to the middle cell, always on, playing from its start, kept out of the general rotation. Same size as everything else. **Click any screen in the preview** to move its video to the centre (click the centre one to clear it); it's ringed on the wall and named under the preview.
+- A middle cell only exists on an **odd grid**, so while a screen is centered the rows and columns round up to odd — otherwise "centered" would sit half a cell off (a 4 × 4 wall has no middle).
 - Turn on **Start on the centered screen, pull back to the wall** and/or **Push back into it at the end**. That's the "start inside my video, zoom out into a wall of videos" shot, in two clicks.
 - In AE the move is **one keyframed slider**: `Zoom to screen (%)` on the Wallmaker Camera null — 0 = the whole wall, 100 = that screen filling the comp. Retime the keys, re-ease them in the graph editor, replace them entirely, drive them from another property. A rebuild **never touches keyframes you have edited**.
 - `Target column` / `Target row` (keyframe them to fly between screens), `Extra scale (%)` and `Pan (px)` layer your own move on top of the zoom.

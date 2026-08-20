@@ -8,7 +8,7 @@ import { gridFor, bandsFor, fillGrid } from '../core/grid'
 import { Stepper } from './controls'
 
 const ASPECTS: { value: CellAspect; label: string }[] = [
-  { value: 'fill', label: 'Fill comp' },
+  { value: 'fill', label: 'Fill' },
   { value: 'wide', label: '16:9' },
   { value: 'tv', label: '4:3' },
   { value: 'square', label: '1:1' },
@@ -19,6 +19,8 @@ const ASPECTS: { value: CellAspect; label: string }[] = [
 export function QuickBar({ cfg, patch }: { cfg: Config; patch: (p: Partial<Config>) => void }) {
   const grid = gridFor(cfg)
   const bands = bandsFor(cfg, grid)
+  // a centred screen only exists on an odd grid, so the counts step two at a time
+  const step = cfg.featured >= 0 && cfg.videos.length + cfg.comps.length > 0 ? 2 : 1
   const toManual = (p: Partial<Config>) => patch({ gridMode: 'manual', rows: grid.rows, cols: grid.cols, ...p })
   return (
     <div className="quickbar">
@@ -30,8 +32,8 @@ export function QuickBar({ cfg, patch }: { cfg: Config; patch: (p: Partial<Confi
       >
         {cfg.gridMode === 'auto' ? 'Auto grid' : 'Manual'}
       </button>
-      <Stepper label="Rows" value={grid.rows} min={1} max={64} onChange={(v) => toManual({ rows: v })} />
-      <Stepper label="Cols" value={grid.cols} min={1} max={64} onChange={(v) => toManual({ cols: v })} />
+      <Stepper label="Rows" value={grid.rows} min={1} max={64} step={step} onChange={(v) => toManual({ rows: v })} />
+      <Stepper label="Cols" value={grid.cols} min={1} max={64} step={step} onChange={(v) => toManual({ cols: v })} />
       <Stepper label="Gap" value={cfg.gap} min={0} max={80} onChange={(v) => patch({ gap: v })} />
       <label className="qb-select">
         <span>Cells</span>

@@ -14,6 +14,8 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
   const bands = bandsFor(cfg, grid)
   const flush = bands.x <= 1 && bands.y <= 1
   const cut = offscreenCount(cfg, grid)
+  const centred = cfg.featured >= 0 && cfg.videos.length + cfg.comps.length > 0
+  const step = centred ? 2 : 1
   return (
     <>
       <Section title="Arrangement">
@@ -35,10 +37,13 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
           onChange={(v) => patch(v === 'manual' ? { gridMode: 'manual', rows: grid.rows, cols: grid.cols } : { gridMode: 'auto' })}
         />
         {cfg.gridMode === 'manual' && (
-          <Row>
-            <NumberInput label="Rows" value={cfg.rows} min={1} max={64} onChange={(v) => patch({ rows: Math.round(v) })} />
-            <NumberInput label="Columns" value={cfg.cols} min={1} max={64} onChange={(v) => patch({ cols: Math.round(v) })} />
-          </Row>
+          <>
+            <Row>
+              <NumberInput label="Rows" value={grid.rows} min={1} max={64} step={step} onChange={(v) => patch({ rows: Math.round(v) })} />
+              <NumberInput label="Columns" value={grid.cols} min={1} max={64} step={step} onChange={(v) => patch({ cols: Math.round(v) })} />
+            </Row>
+            {centred && (cfg.rows % 2 === 0 || cfg.cols % 2 === 0) && <p className="hint">Odd counts — a centre screen needs a middle cell.</p>}
+          </>
         )}
         <Field label="Cell shape">
           <Segmented

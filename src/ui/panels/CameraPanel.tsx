@@ -27,7 +27,7 @@ export function CameraPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Co
         />
         <p className="hint">
           {cfg.featured >= 0
-            ? 'Pinned to the middle cell, always on. Click any screen in the preview to swap it.'
+            ? `Dead centre of the ${grid.rows}×${grid.cols} grid, always on. Click any screen in the preview to swap it.`
             : 'The camera zooms to the middle cell. Pick one here, or click a screen in the preview.'}
         </p>
       </Section>

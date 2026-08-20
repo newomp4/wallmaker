@@ -68,6 +68,35 @@ const cfg = (p: Partial<Config>): Config => ({ ...DEFAULT_CONFIG, videos: Array.
   check('fill works on a vertical comp', vfill.cellAspect === 'wide' && Math.abs(vg.cellW / vg.cellH / (16 / 9) - 1) < 0.002 && vb.x <= 1 && vb.y <= 1, `${vg.rows}x${vg.cols} gap ${vfill.gap}`)
 }
 
+// ---- a centred screen must actually be in the centre ----
+{
+  for (const [rows, cols, shape, fit] of [
+    [3, 9, 'tall', 'contain'],
+    [3, 9, 'tall', 'cover'],
+    [4, 5, 'wide', 'contain'],
+    [4, 4, 'fill', 'contain'],
+    [6, 6, 'fill', 'contain'],
+  ] as const) {
+    const c = cfg({ gridMode: 'manual', rows, cols, cellAspect: shape, wallFit: fit, gap: 8, featured: 0, videos: Array.from({ length: 8 }, (_, i) => `/v/${i}.mp4`) })
+    const g = gridFor(c)
+    const s = planScreens(c, g)
+    const f = s.find((x) => x.featured)!
+    const dx = (f.col - (g.cols - 1) / 2) * (g.cellW + c.gap)
+    const dy = (f.row - (g.rows - 1) / 2) * (g.cellH + c.gap)
+    check(`centred ${rows}x${cols} ${shape}/${fit}: the pinned screen sits dead centre`, Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01, `${g.rows}x${g.cols} offset ${dx.toFixed(1)},${dy.toFixed(1)}`)
+    check(`centred ${rows}x${cols} ${shape}/${fit}: odd grid`, g.rows % 2 === 1 && g.cols % 2 === 1, `${g.rows}x${g.cols}`)
+  }
+  // no centred screen: the grid is left exactly as asked
+  const plain = cfg({ gridMode: 'manual', rows: 4, cols: 4, cellAspect: 'fill', featured: -1 })
+  check('no centre screen: the grid is untouched', gridFor(plain).rows === 4 && gridFor(plain).cols === 4)
+  // and "Fit exactly" must not undo it -- it can only propose odd grids while one is centred
+  const locked = cfg({ gridMode: 'manual', rows: 5, cols: 5, cellAspect: 'wide', gap: 8, featured: 0, videos: ['/v/a.mp4', '/v/b.mp4'] })
+  const fitted = { ...locked, ...fillGrid(locked) }
+  const fg = gridFor(fitted)
+  const fb = bandsFor(fitted, fg)
+  check('fit-exactly stays flush with a centre screen', fb.x <= 1 && fb.y <= 1 && fg.rows % 2 === 1 && fg.cols % 2 === 1, `${fg.rows}x${fg.cols} gap ${fitted.gap} bands ${JSON.stringify(fb)}`)
+}
+
 // ---- 'cover': keep the cell shape, let the outer screens run off the frame ----
 {
   for (const [shape, want, w, h, rows, cols] of [

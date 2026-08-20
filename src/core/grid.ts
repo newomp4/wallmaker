@@ -62,12 +62,18 @@ export function gridFor(cfg: Config): GridSpec {
   const base = cfg.gridMode === 'manual' ? { rows: Math.max(1, cfg.rows), cols: Math.max(1, cfg.cols) } : autoGrid(n, cfg.compW, cfg.compH, cfg.gap, cfg.margin, aspect)
   const availW = Math.max(1, cfg.compW - 2 * cfg.margin)
   const availH = Math.max(1, cfg.compH - 2 * cfg.margin)
-  const cell = cellFor(base.rows, base.cols, availW, availH, cfg.gap, aspect) ?? { cellW: Math.max(1, availW / base.cols), cellH: Math.max(1, availH / base.rows) }
-  let { rows, cols } = base
+  // A centred screen needs a cell that sits EXACTLY in the middle of the wall, and an even row or
+  // column count has no such cell -- the middle falls on a gap, and the "centred" screen ends up
+  // half a cell off. So while one is chosen, the grid rounds up to odd counts.
+  const centred = cfg.featured >= 0 && cfg.videos.length + cfg.comps.length > 0
+  const odd = (v: number) => (centred && v % 2 === 0 ? v + 1 : v)
+  let rows = odd(base.rows)
+  let cols = odd(base.cols)
+  const cell = cellFor(rows, cols, availW, availH, cfg.gap, aspect) ?? { cellW: Math.max(1, availW / cols), cellH: Math.max(1, availH / rows) }
   // stretched cells already cover the comp exactly, so 'cover' only has work to do with a locked shape
   if (cfg.wallFit === 'cover' && aspect !== null) {
-    cols = Math.max(cols, Math.min(200, Math.ceil((availW + cfg.gap) / (cell.cellW + cfg.gap))))
-    rows = Math.max(rows, Math.min(200, Math.ceil((availH + cfg.gap) / (cell.cellH + cfg.gap))))
+    cols = odd(Math.max(cols, Math.min(200, Math.ceil((availW + cfg.gap) / (cell.cellW + cfg.gap)))))
+    rows = odd(Math.max(rows, Math.min(200, Math.ceil((availH + cfg.gap) / (cell.cellH + cfg.gap)))))
   }
   return {
     rows,
@@ -122,12 +128,16 @@ export function fillGrid(cfg: Config): Partial<Config> {
   const g = gridFor(cfg)
   const aspect = aspectOf(cfg)
   const want = Math.max(1, cfg.gridMode === 'manual' ? cfg.rows * cfg.cols : cfg.videos.length + cfg.comps.length || g.rows * g.cols)
+  // a centred screen forces odd counts (see gridFor), so only odd grids can actually stay flush
+  const centred = cfg.featured >= 0 && cfg.videos.length + cfg.comps.length > 0
+  const step = centred ? 2 : 1
+  const from = centred ? 1 : 1
 
   if (aspect !== null) {
     let best: { rows: number; cols: number; gap: number } | null = null
     let bestScore = Infinity
-    for (let rows = 1; rows <= 40; rows++) {
-      for (let cols = 1; cols <= 40; cols++) {
+    for (let rows = from; rows <= 40; rows += step) {
+      for (let cols = from; cols <= 40; cols += step) {
         const gap = gapForExactFit(rows, cols, aspect, availW, availH)
         if (!Number.isFinite(gap) || gap < 0 || gap > 80) continue // 80 = the panel's gap ceiling
         const cw = (availW - (cols - 1) * gap) / cols
@@ -147,10 +157,10 @@ export function fillGrid(cfg: Config): Partial<Config> {
   const target = aspect ?? g.cellW / g.cellH
   let best = { rows: g.rows, cols: g.cols }
   let bestScore = Infinity
-  for (let rows = 1; rows <= 64; rows++) {
+  for (let rows = from; rows <= 64; rows += step) {
     const ch = (availH - (rows - 1) * cfg.gap) / rows
     if (ch <= 2) break
-    for (let cols = 1; cols <= 64; cols++) {
+    for (let cols = from; cols <= 64; cols += step) {
       const cw = (availW - (cols - 1) * cfg.gap) / cols
       if (cw <= 2) break
       const score = Math.abs(Math.log(cw / ch / target)) + 0.12 * Math.abs(Math.log((rows * cols) / want))
