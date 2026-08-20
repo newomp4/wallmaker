@@ -306,13 +306,24 @@ $.global.WALLMAKER = (function () {
     var it = app.project.importFile(io);
     it.parentFolder = st.footFolder;
     it.comment = TAG + '-footage';
-    if (st.data.loop && !it.mainSource.isStill && it.duration > 0) {
+    return prepareFootage(path, it);
+  }
+
+  /** Records the un-looped source duration (offsets are fractions of THAT), then applies enough
+   *  loops that any offset still leaves a full comp's worth of media. */
+  function prepareFootage(path, it) {
+    var srcDur = it.mainSource.isStill ? 0 : it.duration;
+    if (st.data.loop && srcDur > 0) {
       try {
-        it.mainSource.loop = Math.max(1, Math.min(9999, Math.ceil(st.data.durationSec / it.duration) + 2));
+        if (it.mainSource.loop > 1) {
+          srcDur = srcDur / it.mainSource.loop; // reused from a previous build: duration is already multiplied
+        }
+        it.mainSource.loop = Math.max(1, Math.min(9999, Math.ceil((st.data.durationSec + srcDur) / srcDur) + 1));
       } catch (e) {}
     }
-    st.footage[path] = it;
-    return it;
+    var rec = { item: it, srcDur: srcDur };
+    st.footage[path] = rec;
+    return rec;
   }
 
   /** On a rebuild, reuse footage already sitting in our folder instead of importing again. */
@@ -322,7 +333,7 @@ $.global.WALLMAKER = (function () {
       var it = st.footFolder.item(i);
       if (it instanceof FootageItem && it.mainSource && it.mainSource.file) {
         try {
-          st.footage[it.mainSource.file.fsName.replace(/\\/g, '/')] = it;
+          prepareFootage(it.mainSource.file.fsName.replace(/\\/g, '/'), it);
         } catch (e) {}
       }
     }
@@ -335,13 +346,14 @@ $.global.WALLMAKER = (function () {
     var s = d.screens[idx];
     var vid = d.videos[s.v];
     var path = vid.path;
-    var it;
+    var rec;
     try {
-      it = importVideo(path);
+      rec = importVideo(path);
     } catch (e) {
       st.skipped.push(vid.name + ' (' + String(e && e.message ? e.message : e) + ')');
       return;
     }
+    var it = rec.item;
     var sw = Math.max(1, it.width);
     var sh = Math.max(1, it.height);
     var cw = d.grid.cellW;
@@ -359,18 +371,16 @@ $.global.WALLMAKER = (function () {
     layer.name = 'Screen ' + pad3(idx + 1, st.padWidth) + ' \u00b7 ' + vid.name;
     layer.comment = TAG + '-screen ' + idx;
 
-    // timing: random start point inside the source, then hold the comp span
-    var srcDur = it.mainSource.isStill ? 0 : it.duration;
+    // timing: random start point inside the SOURCE (not the looped span), then hold the comp span
     var off = 0;
-    if (srcDur > 0 && s.offset > 0) {
-      off = Math.round(s.offset * srcDur * d.fps) / d.fps;
+    if (rec.srcDur > 0 && s.offset > 0) {
+      off = Math.round(s.offset * rec.srcDur * d.fps) / d.fps;
     }
     layer.startTime = -off;
-    var footDur = it.duration * (d.loop && !it.mainSource.isStill ? 1 : 1); // duration already reflects the loop count
     if (!it.mainSource.isStill) {
       try {
         layer.inPoint = 0;
-        layer.outPoint = Math.min(d.durationSec, Math.max(0.01, footDur - off));
+        layer.outPoint = Math.min(d.durationSec, Math.max(0.01, it.duration - off));
       } catch (e) {}
     }
     if (d.mute) {
