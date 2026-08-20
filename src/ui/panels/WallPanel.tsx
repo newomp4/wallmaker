@@ -61,7 +61,7 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
               : `${bands.y > 1 ? `${bands.y} px top & bottom` : ''}${bands.x > 1 && bands.y > 1 ? ' · ' : ''}${bands.x > 1 ? `${bands.x} px left & right` : ''}`}
           </span>
           {!flush && (
-            <button type="button" className="btn" title="Pick the rows and columns that reach the comp edges with cells this shape" onClick={() => patch(fillGrid(cfg))}>
+            <button type="button" className="btn" title="Pick the rows, columns and gap that reach the comp edges with cells exactly this shape" onClick={() => patch(fillGrid(cfg))}>
               Fill comp
             </button>
           )}

@@ -77,19 +77,55 @@ export function bandsFor(cfg: Config, grid?: GridSpec): { x: number; y: number }
 }
 
 /**
- * Rows × columns that make the wall fill the comp EXACTLY, with cells as close as possible to the
- * shape you asked for and to the number of screens you already have.
+ * The gap that makes `rows × cols` cells of exactly `aspect` fill `availW × availH` with nothing
+ * left over. NaN when no gap can (e.g. a single cell whose comp is the wrong shape).
  *
- * A locked cell shape can only reach the comp edges when rows/cols happen to match the comp's
- * aspect; otherwise AE gets letterbox bands. This finds the counts where stretching cells to fill
- * costs almost nothing, so "flush edges" and "cells the right shape" stop fighting each other.
+ * Solving  (availW - (cols-1)g)/cols  =  aspect · (availH - (rows-1)g)/rows  for g.
  */
-export function fillGrid(cfg: Config): { gridMode: 'manual'; rows: number; cols: number; cellAspect: 'fill' } {
+export function gapForExactFit(rows: number, cols: number, aspect: number, availW: number, availH: number): number {
+  const num = rows * availW - aspect * cols * availH
+  const den = rows * (cols - 1) - aspect * cols * (rows - 1)
+  if (Math.abs(den) < 1e-9) return Math.abs(num) < 1e-6 ? 0 : NaN
+  return num / den
+}
+
+/**
+ * Reach the comp edges with nothing left over.
+ *
+ * With a locked cell shape the cells must KEEP that shape, so the grid and the gap are what move:
+ * we look for the rows × columns whose exact-fit gap is sensible, preferring counts near the ones
+ * you have and a gap near the one you set. Only if no such grid exists do we fall back to
+ * stretching the cells (which always fills, but abandons the shape you asked for).
+ */
+export function fillGrid(cfg: Config): Partial<Config> {
   const availW = Math.max(1, cfg.compW - 2 * cfg.margin)
   const availH = Math.max(1, cfg.compH - 2 * cfg.margin)
   const g = gridFor(cfg)
-  const target = aspectOf(cfg) ?? g.cellW / g.cellH
+  const aspect = aspectOf(cfg)
   const want = Math.max(1, cfg.gridMode === 'manual' ? cfg.rows * cfg.cols : cfg.videos.length + cfg.comps.length || g.rows * g.cols)
+
+  if (aspect !== null) {
+    let best: { rows: number; cols: number; gap: number } | null = null
+    let bestScore = Infinity
+    for (let rows = 1; rows <= 40; rows++) {
+      for (let cols = 1; cols <= 40; cols++) {
+        const gap = gapForExactFit(rows, cols, aspect, availW, availH)
+        if (!Number.isFinite(gap) || gap < 0 || gap > 80) continue // 80 = the panel's gap ceiling
+        const cw = (availW - (cols - 1) * gap) / cols
+        const ch = (availH - (rows - 1) * gap) / rows
+        if (cw < 8 || ch < 8) continue
+        const score = Math.abs(Math.log((rows * cols) / want)) + Math.abs(gap - cfg.gap) / 25
+        if (score < bestScore) {
+          bestScore = score
+          best = { rows, cols, gap: Math.round(gap * 100) / 100 }
+        }
+      }
+    }
+    if (best) return { gridMode: 'manual', rows: best.rows, cols: best.cols, gap: best.gap }
+  }
+
+  // no grid of that shape fits: stretch the cells instead, staying as close to it as we can
+  const target = aspect ?? g.cellW / g.cellH
   let best = { rows: g.rows, cols: g.cols }
   let bestScore = Infinity
   for (let rows = 1; rows <= 64; rows++) {
@@ -98,7 +134,6 @@ export function fillGrid(cfg: Config): { gridMode: 'manual'; rows: number; cols:
     for (let cols = 1; cols <= 64; cols++) {
       const cw = (availW - (cols - 1) * cfg.gap) / cols
       if (cw <= 2) break
-      // how wrong the cell shape is, plus a gentle pull towards the screen count you already have
       const score = Math.abs(Math.log(cw / ch / target)) + 0.12 * Math.abs(Math.log((rows * cols) / want))
       if (score < bestScore) {
         bestScore = score

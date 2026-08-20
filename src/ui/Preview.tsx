@@ -83,6 +83,8 @@ function tiles(): [string, string] {
   return [a, b]
 }
 
+const basename = (p: string) => p.slice(p.lastIndexOf('/') + 1)
+
 export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partial<Config>) => void }) {
   const src = useSources(rawCfg, patch)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -245,6 +247,37 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
     setPlaying(true)
   }
 
+  /** Click a screen on the wall to make its video the centre one (click it again to clear). */
+  const pickCenter = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (sourceCount === 0) return
+    const canvas = e.currentTarget
+    const r = canvas.getBoundingClientRect()
+    const x = (e.clientX - r.left) * (canvas.width / Math.max(1, r.width))
+    const y = (e.clientY - r.top) * (canvas.height / Math.max(1, r.height))
+    const scale = Math.min(1, 1280 / cfg.compW, 900 / cfg.compH)
+    const cam = cameraAt(tRef.current, camera, cfg.durationSec)
+    const cw = grid.cellW * scale * cam.k
+    const ch = grid.cellH * scale * cam.k
+    const gp = cfg.gap * scale * cam.k
+    const cx0 = Math.round(cfg.compW * scale) / 2 + cam.x * scale
+    const cy0 = Math.round(cfg.compH * scale) / 2 + cam.y * scale
+    const col = Math.round((x - cx0) / (cw + gp) + (grid.cols - 1) / 2)
+    const row = Math.round((y - cy0) / (ch + gp) + (grid.rows - 1) / 2)
+    const hit = screens.find((sc) => sc.row === row && sc.col === col)
+    if (!hit) return
+    const px = cx0 + (col - (grid.cols - 1) / 2) * (cw + gp)
+    const py = cy0 + (row - (grid.rows - 1) / 2) * (ch + gp)
+    if (Math.abs(x - px) > cw / 2 || Math.abs(y - py) > ch / 2) return // landed in a gap
+    patch({ featured: hit.featured ? -1 : hit.v })
+  }
+
+  const centerName =
+    cfg.featured >= 0
+      ? cfg.featured < cfg.videos.length
+        ? basename(cfg.videos[cfg.featured])
+        : (cfg.comps[cfg.featured - cfg.videos.length]?.name ?? null)
+      : null
+
   return (
     <>
       <div className="preview-wrap">
@@ -277,11 +310,17 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
           className={'preview-stage' + (cfg.background === 'transparent' ? ' checker' : '') + (sourceCount === 0 ? ' dimmed' : '')}
           style={{ aspectRatio: `${cfg.compW} / ${cfg.compH}` }}
         >
-          <canvas ref={canvasRef} />
+          <canvas
+            ref={canvasRef}
+            onClick={pickCenter}
+            style={{ cursor: sourceCount > 0 ? 'pointer' : 'default' }}
+            title={sourceCount > 0 ? 'Click a screen to put its video in the centre' : undefined}
+          />
         </div>
         <div className="preview-meta">
           {grid.rows}×{grid.cols} · {screens.length} screens · {Math.round(grid.cellW)}×{Math.round(grid.cellH)}
           {sourceCount > 0 ? ` · ${sourceCount} source${sourceCount === 1 ? '' : 's'}` : ''}
+          {centerName ? ` · center ${centerName}` : ''}
           {pending > 0 ? ` · loading ${pending}` : ''}
         </div>
       </div>

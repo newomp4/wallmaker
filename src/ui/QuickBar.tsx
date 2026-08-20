@@ -47,7 +47,7 @@ export function QuickBar({ cfg, patch }: { cfg: Config; patch: (p: Partial<Confi
         <Stepper label="w:h" value={Math.round(cfg.cellAspectCustom * 100) / 100} min={0.1} max={10} step={0.05} onChange={(v) => patch({ cellAspectCustom: v })} />
       )}
       {(bands.x > 1 || bands.y > 1) && (
-        <button type="button" className="qb-chip" title="Pick the rows and columns that reach the comp edges with cells this shape" onClick={() => patch(fillGrid(cfg))}>
+        <button type="button" className="qb-chip" title="Pick the rows, columns and gap that reach the comp edges with cells exactly this shape" onClick={() => patch(fillGrid(cfg))}>
           Fill comp
         </button>
       )}

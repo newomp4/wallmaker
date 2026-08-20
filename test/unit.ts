@@ -51,6 +51,21 @@ const cfg = (p: Partial<Config>): Config => ({ ...DEFAULT_CONFIG, videos: Array.
   const already = cfg({ gridMode: 'manual', rows: 3, cols: 4, cellAspect: 'fill' })
   const b3 = bandsFor(already)
   check('stretched cells always fill the comp', b3.x <= 1 && b3.y <= 1)
+
+  // a locked shape must SURVIVE filling the comp -- the gap moves, the cells keep their ratio
+  for (const [shape, want] of [['tall', 9 / 16], ['square', 1], ['tv', 4 / 3], ['wide', 16 / 9]] as const) {
+    const c = cfg({ gridMode: 'manual', rows: 4, cols: 5, cellAspect: shape, gap: 8, margin: 0, compW: 1920, compH: 1080 })
+    const filled = { ...c, ...fillGrid(c) }
+    const gg = gridFor(filled)
+    const bb = bandsFor(filled)
+    check(`fill keeps ${shape} cells exactly and reaches the edges`, filled.cellAspect === shape && Math.abs(gg.cellW / gg.cellH / want - 1) < 0.002 && bb.x <= 1 && bb.y <= 1, `${gg.rows}x${gg.cols} gap ${filled.gap} cells ${gg.cellW.toFixed(1)}x${gg.cellH.toFixed(1)} bands ${JSON.stringify(bb)}`)
+  }
+  // vertical comp too (the gap can need to move on the other axis)
+  const vert = cfg({ gridMode: 'manual', rows: 5, cols: 3, cellAspect: 'wide', gap: 6, margin: 0, compW: 1080, compH: 1920 })
+  const vfill = { ...vert, ...fillGrid(vert) }
+  const vg = gridFor(vfill)
+  const vb = bandsFor(vfill)
+  check('fill works on a vertical comp', vfill.cellAspect === 'wide' && Math.abs(vg.cellW / vg.cellH / (16 / 9) - 1) < 0.002 && vb.x <= 1 && vb.y <= 1, `${vg.rows}x${vg.cols} gap ${vfill.gap}`)
 }
 
 // ---- reveal patterns ----

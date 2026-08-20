@@ -14,14 +14,14 @@ Point it at a folder of videos (or select comps right in your project), choose t
 **The grid**
 - Automatic rows × columns from your source count, or set them yourself — 2×2 to 1000+ screens. Every cell is exactly the same size.
 - **Cell shape lock**: keep every screen 16:9 / 4:3 / 1:1 / 9:16 / custom — the wall centers itself instead of stretching; or fill the comp edge-to-edge.
-- **Fill comp**: a locked cell shape only reaches the comp edges when the grid happens to match the comp's aspect — otherwise you get letterbox bands. The panel tells you how big they are and one click picks the rows × columns that reach the edges with cells that shape.
+- **Fill comp**: a locked cell shape only reaches the comp edges when the grid happens to match the comp's aspect — otherwise you get letterbox bands. The panel tells you how big they are, and one click solves for the rows × columns **and gap** that reach the edges with cells *exactly* that shape. 9:16 screens filling a 1920×1080 comp: 3 × 9 with a 21.08 px gap, no bands.
 - Gap, outer margin, rounded corners. Video fit per screen: Fill (crop), Fit (letterbox) or Stretch.
 - **Arrangements** — one-click grid presets (Auto, Edge to edge, 16:9 cells, 3×3, 4×3, 5×5, Spaced).
 - A **quick bar** under the live preview holds the tune-while-you-watch controls (grid, gap, cell shape, seed).
 - Background: one solid color, or nothing at all. Grading, glow and texture belong on your own layers above the wall — this tool does not do looks.
 
 **The camera — the zoom-out**
-- Pick a **centered screen**: one source (file or comp) pinned to the middle cell, always on, playing from its start, kept out of the general rotation. Same size as everything else.
+- Pick a **centered screen**: one source (file or comp) pinned to the middle cell, always on, playing from its start, kept out of the general rotation. Same size as everything else. **Click any screen in the preview** to move its video to the centre (click the centre one to clear it); it's ringed on the wall and named under the preview.
 - Turn on **Start on the centered screen, pull back to the wall** and/or **Push back into it at the end**. That's the "start inside my video, zoom out into a wall of videos" shot, in two clicks.
 - In AE the move is **one keyframed slider**: `Zoom to screen (%)` on the Wallmaker Camera null — 0 = the whole wall, 100 = that screen filling the comp. Retime the keys, re-ease them in the graph editor, replace them entirely, drive them from another property. A rebuild **never touches keyframes you have edited**.
 - `Target column` / `Target row` (keyframe them to fly between screens), `Extra scale (%)` and `Pan (px)` layer your own move on top of the zoom.
