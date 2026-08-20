@@ -119,7 +119,16 @@ export function ColorInput({ label, value, onChange }: { label: string; value: s
       <span className="lbl">{label}</span>
       <span className="colorwrap">
         <input type="color" aria-label={`${label} (picker)`} value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#000000'} onChange={(e) => onChange(e.target.value)} />
-        <input type="text" aria-label={`${label} (hex)`} value={value} onChange={(e) => onChange(e.target.value)} />
+        <input
+          type="text"
+          aria-label={`${label} (hex)`}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={(e) => {
+            const v = e.target.value.trim()
+            if (/^[0-9a-f]{6}$/i.test(v)) onChange('#' + v.toLowerCase())
+          }}
+        />
       </span>
     </div>
   )
@@ -160,19 +169,17 @@ export function Stepper({ label, value, min, max, step = 1, onChange, format }: 
         onChange={(e) => setText(e.target.value)}
         onBlur={() => {
           const v = parseFloat(text ?? '')
-          if (!Number.isNaN(v)) onChange(clamp(v))
+          if (!Number.isNaN(v)) onChange(clamp(snap(v)))
           setText(null)
         }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-          if (e.key === 'ArrowUp') {
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
             e.preventDefault()
-            nudge(1)
-            setText(null)
-          }
-          if (e.key === 'ArrowDown') {
-            e.preventDefault()
-            nudge(-1)
+            // arrows step from what's typed, not from the stale committed value
+            const typed = parseFloat(text ?? '')
+            const base = Number.isNaN(typed) ? value : clamp(snap(typed))
+            onChange(clamp(snap(base + (e.key === 'ArrowUp' ? 1 : -1) * step)))
             setText(null)
           }
         }}

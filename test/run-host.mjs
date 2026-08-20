@@ -29,7 +29,7 @@ const ROUNDS = {
       compName: 'Wallmaker test A',
       compW: 1920, compH: 1080, fps: 30, durationSec: 10,
       gridMode: 'manual', rows: 3, cols: 4, gap: 8, margin: 40,
-      fill: 'cover', cornerRadius: 0, assign: 'sequential',
+      fill: 'stretch', cornerRadius: 0, assign: 'sequential',
       randomStart: true, loop: true, muteAudio: true, labels: false,
       background: 'dark', bgColor: '#101014',
       animate: true, reveal: 'random', revealStart: 0.5, revealDuration: 5,
@@ -44,13 +44,13 @@ const ROUNDS = {
       compName: 'Wallmaker test B',
       compW: 1080, compH: 1920, fps: 24, durationSec: 12,
       gridMode: 'manual', rows: 10, cols: 10, gap: 4, margin: 0,
-      fill: 'cover', cornerRadius: 6, assign: 'shuffle',
+      fill: 'contain', cornerRadius: 6, assign: 'shuffle',
       randomStart: true, loop: true, muteAudio: true, labels: true, labelPrefix: 'CAM',
       background: 'static', bgColor: '#05070a', staticBrightness: 12,
       animate: true, reveal: 'center', revealStart: 1, revealDuration: 6,
-      screenAnim: 'flicker', screenAnimFrames: 10, jitter: 0.1, deadPct: 20, seed: 11,
+      screenAnim: 'flicker', screenAnimFrames: 10, jitter: 0.1, deadPct: 20, dropouts: 50, seed: 11,
     },
-    times: [0.5, 4.0, 9.0],
+    times: [0.5, 4.37, 9.43],
   },
   D: {
     // the feature round: hero 2×2 screens, borders, scanlines, focus spotlight, a comp as a source
@@ -59,7 +59,7 @@ const ROUNDS = {
       compName: 'Wallmaker test D',
       compW: 1920, compH: 1080, fps: 30, durationSec: 10,
       gridMode: 'manual', rows: 6, cols: 6, gap: 8, margin: 20, heroes: 2,
-      fill: 'cover', cornerRadius: 8, assign: 'sequential',
+      fill: 'cover', cornerRadius: 26, assign: 'sequential',
       randomStart: true, loop: true, muteAudio: true, labels: false,
       background: 'dark', bgColor: '#0b0b0e',
       borders: true, borderWidth: 2, borderColor: '#30303a',
@@ -93,8 +93,13 @@ const ROUNDS = {
   },
 }
 
-const wanted = process.argv.slice(2).filter((a) => ROUNDS[a])
-const runs = wanted.length ? wanted : ['A', 'B', 'D', 'F']
+const argRounds = process.argv.slice(2)
+const unknown = argRounds.filter((a) => !ROUNDS[a])
+if (unknown.length) {
+  console.error(`Unknown round(s): ${unknown.join(', ')} — valid: ${Object.keys(ROUNDS).join(', ')} (round C lives in run-panel.mjs, E in run-rebuild.mjs)`)
+  process.exit(1)
+}
+const runs = argRounds.length ? argRounds : ['A', 'B', 'D', 'F']
 
 for (const key of runs) {
   const round = ROUNDS[key]
@@ -119,11 +124,11 @@ for (const key of runs) {
     `osascript -e 'with timeout of 900 seconds' -e 'tell application "${AE}" to DoScript "$.evalFile(\\"${runnerPath}\\")"' -e 'end timeout'`,
     { stdio: 'inherit' },
   )
-  // saveFrameToPng is async — wait for result.json + stable png sizes
+  // saveFrameToPng is async — wait for result.json, check it, THEN wait for stable png sizes
   await waitFor(() => existsSync(join(dir, 'result.json')), 120000, 'result.json')
-  await waitForStablePngs(dir, round.times)
   const result = JSON.parse(readFileSync(join(dir, 'result.json'), 'utf8'))
   if (!result.ok) throw new Error(`Round ${key} build failed in AE: ${result.error}`)
+  await waitForStablePngs(dir, round.times)
   console.log(`Round ${key} built in ${((Date.now() - t0) / 1000).toFixed(1)} s:`, JSON.stringify(result.finish))
 
   console.log(`Round ${key}: verifying…`)
@@ -171,11 +176,12 @@ ${compSrc}  WALLMAKER.begin(${j({ jsonPath: wallPath, folder: dir })});
     if (s.done >= s.total) break;
   }
   var fin = WALLMAKER.finish();
+  var layersJ = WALLMAKER_JSON.parse(WALLMAKER.layers(${j({ compName })}));
   var probes = {};
   var ctls = {};
 ${probes}
 ${snaps}
-  WRITE('result.json', WALLMAKER_JSON.stringify({ ok: true, finish: WALLMAKER_JSON.parse(fin), probes: probes, ctls: ctls }));
+  WRITE('result.json', WALLMAKER_JSON.stringify({ ok: true, finish: WALLMAKER_JSON.parse(fin), probes: probes, ctls: ctls, layers: layersJ }));
 } catch (e) {
   WRITE('result.json', WALLMAKER_JSON.stringify({ ok: false, error: String(e && e.message ? e.message + ' (line ' + e.line + ')' : e) }));
 }

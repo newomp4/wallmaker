@@ -54,7 +54,9 @@ export function useConfig() {
     }
   })
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const save = useRef(cfg)
   useEffect(() => {
+    save.current = cfg
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => {
       try {
@@ -67,6 +69,22 @@ export function useConfig() {
       if (timer.current) clearTimeout(timer.current)
     }
   }, [cfg])
+  useEffect(() => {
+    // a change made just before the panel closes must not be lost to the debounce
+    const flush = () => {
+      try {
+        localStorage.setItem(KEY, JSON.stringify(save.current))
+      } catch {
+        /* quota */
+      }
+    }
+    window.addEventListener('pagehide', flush)
+    window.addEventListener('beforeunload', flush)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      window.removeEventListener('beforeunload', flush)
+    }
+  }, [])
   const patch = useCallback((p: Partial<Config>) => setCfg((c) => ({ ...c, ...p })), [])
   const reset = useCallback(() => setCfg({ ...DEFAULT_CONFIG }), [])
   return { cfg, patch, reset, setCfg }

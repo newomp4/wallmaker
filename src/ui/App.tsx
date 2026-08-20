@@ -28,7 +28,15 @@ export default function App() {
   const [armReset, setArmReset] = useState(false)
   const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [dragOver, setDragOver] = useState(false)
+  const dragDepth = useRef(0)
   const sourcesApi = useSources(cfg, patch)
+  const [toast, setToast] = useState('')
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const showToast = (msg: string) => {
+    setToast(msg)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(''), 4000)
+  }
 
   // debug hooks: lets the automated tests (and the curious) drive the panel from the CEF debug port
   useEffect(() => {
@@ -52,18 +60,24 @@ export default function App() {
   return (
     <div
       className={'app' + (dragOver ? ' dragging' : '')}
-      onDragOver={(e) => {
+      onDragEnter={(e) => {
         e.preventDefault()
+        dragDepth.current++
         setDragOver(true)
       }}
-      onDragLeave={(e) => {
-        if (e.currentTarget === e.target) setDragOver(false)
+      onDragOver={(e) => e.preventDefault()}
+      onDragLeave={() => {
+        // enter/leave fire per child element -- a depth counter is the only reliable "really left"
+        dragDepth.current = Math.max(0, dragDepth.current - 1)
+        if (dragDepth.current === 0) setDragOver(false)
       }}
       onDrop={(e) => {
         e.preventDefault()
+        dragDepth.current = 0
         setDragOver(false)
-        if (e.dataTransfer.files.length && !sourcesApi.addDropped(e.dataTransfer.files)) {
-          sourcesApi.setError('Could not read dropped file paths here — use “Add files…” instead.')
+        if (e.dataTransfer.files.length) {
+          if (sourcesApi.addDropped(e.dataTransfer.files)) showToast(`Added dropped video${e.dataTransfer.files.length === 1 ? '' : 's'}.`)
+          else showToast('Could not read dropped file paths here — use “Add files…” instead.')
         }
       }}
     >
@@ -124,6 +138,11 @@ export default function App() {
           </button>
         </div>
       </header>
+      {toast && (
+        <div className="toast" role="status">
+          {toast}
+        </div>
+      )}
       <div className="main">
         <div className="stage">
           <Preview cfg={cfg} patch={patch} />
@@ -132,7 +151,7 @@ export default function App() {
           <nav className="tabs">
             {(
               [
-                ['videos', `Videos${sources ? ` · ${sources}` : ''}`, TAB_ICONS.videos],
+                ['videos', `Sources${sources ? ` · ${sources}` : ''}`, TAB_ICONS.videos],
                 ['wall', 'Wall', TAB_ICONS.wall],
                 ['look', 'Look', TAB_ICONS.look],
                 ['reveal', 'Power-on', TAB_ICONS.reveal],

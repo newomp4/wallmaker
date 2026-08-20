@@ -17,11 +17,14 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
             onChange={(v) => {
               const p = COMP_PRESETS.find((x) => x.label === v)
               if (p) patch({ compW: p.w, compH: p.h })
+              else document.getElementById('wm-comp-width')?.querySelector('input')?.focus() // 'Custom' = type a size
             }}
           />
         </Field>
         <Row>
-          <NumberInput label="Width" value={cfg.compW} min={16} max={16384} onChange={(v) => patch({ compW: Math.round(v) })} />
+          <div className="field-wrap" id="wm-comp-width" style={{ display: 'contents' }}>
+            <NumberInput label="Width" value={cfg.compW} min={16} max={16384} onChange={(v) => patch({ compW: Math.round(v) })} />
+          </div>
           <NumberInput label="Height" value={cfg.compH} min={16} max={16384} onChange={(v) => patch({ compH: Math.round(v) })} />
         </Row>
         <Row>
@@ -61,7 +64,7 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
         {cfg.cellAspect === 'custom' && <NumberInput label="Cell aspect (width ÷ height)" value={cfg.cellAspectCustom} min={0.1} max={10} step={0.01} onChange={(v) => patch({ cellAspectCustom: v })} />}
         <Slider label="Gap between screens" value={cfg.gap} min={0} max={80} onChange={(v) => patch({ gap: v })} format={(v) => `${v} px`} hint="Also a live 'Gap (px)' slider on the Controls null in AE — keyframe it and the screens fly apart." />
         <Slider label="Outer margin" value={cfg.margin} min={0} max={400} onChange={(v) => patch({ margin: v })} format={(v) => `${v} px`} />
-        <Slider label="Big screens (2×2)" value={cfg.heroes} min={0} max={8} onChange={(v) => patch({ heroes: v })} format={(v) => (v === 0 ? 'none' : String(v))} hint="Hero monitors that span 2×2 cells — placed by the seed." />
+        <Slider label="Big screens (2×2)" value={cfg.heroes} min={0} max={8} onChange={(v) => patch({ heroes: v })} format={(v) => (v === 0 ? 'none' : String(v))} hint={grid.rows >= 2 && grid.cols >= 2 ? 'Hero monitors that span 2×2 cells — placed by the seed.' : '⚠ Needs at least a 2×2 grid — no room for big screens in this layout.'} />
       </Section>
       <Section title="Featured screen" hint="Pin one source to the center of the wall — always on, playing from its start. Perfect for 'my video, surrounded by the wall'.">
         <Select
@@ -74,7 +77,7 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
           ]}
           onChange={(v) => patch({ featured: parseInt(v, 10) })}
         />
-        {cfg.featured >= 0 && <Toggle label="Featured screen is big (2×2 cells)" value={cfg.featuredSpan === 2} onChange={(v) => patch({ featuredSpan: v ? 2 : 1 })} />}
+        {cfg.featured >= 0 && <Toggle label="Featured screen is big (2×2 cells)" value={cfg.featuredSpan === 2} onChange={(v) => patch({ featuredSpan: v ? 2 : 1 })} hint={grid.rows >= 2 && grid.cols >= 2 ? undefined : '⚠ Needs at least a 2×2 grid.'} />}
       </Section>
       <Section title="Camera" hint="Keyframed on the Controls null (open its Scale/Position to retime or re-ease). Targets the featured screen, or the centermost one.">
         <Toggle label="Start on one screen, pull back to reveal the wall" value={cfg.intro === 'zoomOut'} onChange={(v) => patch({ intro: v ? 'zoomOut' : 'none' })} />

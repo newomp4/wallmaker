@@ -95,7 +95,7 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
   const mouse = useRef<{ x: number; y: number } | null>(null)
   const [t, setT] = useState(0)
   const [playing, setPlaying] = useState(true)
-  const [, setVersion] = useState(0)
+  const [thumbVersion, setVersion] = useState(0)
   const cfg = useMemo(() => withAnimation(rawCfg), [rawCfg])
   const grid = useMemo(() => gridFor(cfg), [cfg])
   const screens = useMemo(() => planScreens(cfg, grid), [cfg, grid])
@@ -257,9 +257,9 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
       }
       if (showLabels) {
         ctx.fillStyle = 'rgba(255,255,255,.85)'
-        ctx.font = `${Math.max(8, Math.round(ch * 0.13))}px ui-monospace, Menlo, monospace`
+        ctx.font = `${Math.max(8, Math.round(Math.min(cw, ch) * 0.13))}px ui-monospace, Menlo, monospace`
         ctx.textBaseline = 'bottom'
-        ctx.fillText(`${cfg.labelPrefix || 'CAM'} ${pad(s.i + 1)}`, px - w / 2 + ch * 0.07, py + h / 2 - ch * 0.05)
+        ctx.fillText(`${cfg.labelPrefix || 'CAM'} ${pad(s.i + 1)}`, px - w / 2 + Math.min(cw, ch) * 0.07, py + h / 2 - Math.min(cw, ch) * 0.06)
       }
       ctx.restore()
     }
@@ -277,7 +277,7 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
       }
       ctx.restore()
     }
-  }, [cfg, grid, screens, camera, t, hoverTick])
+  }, [cfg, grid, screens, camera, t, hoverTick, thumbVersion])
 
   const loaded = cfg.videos.filter((p) => {
     const th = thumbs.get(p)

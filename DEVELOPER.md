@@ -44,6 +44,14 @@ Every screen layer gets Position / Scale / Opacity expressions that read sliders
 The reveal is **time-based** (scrub the timeline and the wall powers on), controls are **live**
 (retime without rebuilding), the **order** is baked (change it in the panel and rebuild).
 
+**The rebuild contract** (round E verifies both directions): a JSON record after `|` in the
+Controls null's comment stores every slider value the builder last wrote. On rebuild, an
+untouched slider (no keys, value still equals the record) FOLLOWS the panel; a changed or
+keyframed slider is the user's and is kept. Disabled features get their sliders removed so a
+stale value can't keep driving expressions. The camera similarly owns the null's
+Scale/Position only while enabled (a ` cam` marker in the comment), and `planCamera` clamps
+all key times ONCE in shared code so the preview and the keyframes cannot disagree.
+
 ## ES3 landmines (host/index.jsx)
 
 ASCII only, semicolons everywhere, no trailing commas, no array methods, `var` only.
@@ -54,6 +62,7 @@ with a `sourceText` *expression*, never per-label TextDocument writes).
 ## Testing
 
 ```bash
+npm run test:unit     # pure-core unit tests (plan determinism, grid/camera math, thresholds)
 npm run test:videos   # ffmpeg: 12 solid-color clips + 2 patterned, .test-assets/
 npm run test:host     # rounds A+B+D — ⚠ closes the current AE project without saving
 npm run test:rebuild  # round E (rebuild-in-place / remove lifecycle) — same warning

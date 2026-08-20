@@ -103,7 +103,9 @@ export async function callHost<T = unknown>(fn: string, args?: unknown): Promise
 /** Forward slashes everywhere (ExtendScript hands out `C:\\Users\\…` on Windows, CEP accepts either). */
 export function posixPath(p: string): string {
   const unc = /^\\\\|^\/\//.test(p) // \\server\share (network project) keeps its double slash
-  const norm = p.replace(/\\/g, '/').replace(/\/{2,}/g, '/').replace(/\/$/, '')
+  let norm = p.replace(/\\/g, '/').replace(/\/{2,}/g, '/').replace(/\/$/, '')
+  if (norm === '') norm = '/' // the filesystem root must stay '/'
+  else if (/^[A-Za-z]:$/.test(norm) && /[/\\]$/.test(p)) norm += '/' // 'C:/' must not become drive-relative 'C:'
   return unc ? '/' + norm : norm
 }
 
@@ -178,15 +180,10 @@ export function listVideos(folder: string, extensions: string[], limit = 5000): 
       const full = dir + '/' + name
       const dot = name.lastIndexOf('.')
       const ext = dot >= 0 ? name.slice(dot + 1).toLowerCase() : ''
-      if (exts.has(ext)) {
-        out.push(full)
-      } else if (dot < 0 || !ext) {
-        const st = fs.stat(full)
-        if (st.err === 0 && st.data && st.data.isDirectory()) walk(full, depth + 1)
-      } else {
-        const st = fs.stat(full)
-        if (st.err === 0 && st.data && st.data.isDirectory()) walk(full, depth + 1)
-      }
+      const st = fs.stat(full)
+      if (st.err !== 0 || !st.data) continue
+      if (st.data.isDirectory()) walk(full, depth + 1) // a folder named 'dailies.mp4' is still a folder
+      else if (exts.has(ext)) out.push(full)
     }
   }
   walk(posixPath(folder), 0)

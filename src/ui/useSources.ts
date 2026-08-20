@@ -71,5 +71,22 @@ export function useSources(cfg: Config, patch: (p: Partial<Config>) => void) {
     return false
   }
 
-  return { inAE, error, setError, addFolder, addFiles, addSelection, addSamples, addDropped }
+  /** Remove one video by index, remapping cfg.featured so the pinned source stays the same one. */
+  const removeVideo = (i: number) => {
+    const p: Partial<Config> = { videos: cfg.videos.filter((_, j) => j !== i) }
+    if (cfg.featured === i) p.featured = -1
+    else if (cfg.featured > i) p.featured = cfg.featured - 1 // comp indices shift down too
+    patch(p)
+  }
+
+  /** Remove one comp by index (featured indexes videos-then-comps). */
+  const removeComp = (i: number) => {
+    const gi = cfg.videos.length + i
+    const p: Partial<Config> = { comps: cfg.comps.filter((_, j) => j !== i) }
+    if (cfg.featured === gi) p.featured = -1
+    else if (cfg.featured > gi) p.featured = cfg.featured - 1
+    patch(p)
+  }
+
+  return { inAE, error, setError, addFolder, addFiles, addSelection, addSamples, addDropped, removeVideo, removeComp }
 }

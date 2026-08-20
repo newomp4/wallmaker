@@ -33,36 +33,70 @@ def fail(msg):
 cam = wall.get('camera')
 DUR = wall['durationSec']
 def cam_phase(t):
-    """'zoomed' | 'neutral' | 'moving' at time t"""
+    """'zoomed' | 'neutral' | 'moving' at time t (the plan carries absolute clamped times)"""
     if not cam:
         return 'neutral'
     if cam.get('intro'):
-        h, dr = cam['intro']['hold'], cam['intro']['dur']
-        if t <= h - 0.02:
+        if t <= cam['intro']['hold'] - 0.02:
             return 'zoomed'
-        if t < h + dr + 0.1:
+        if t < cam['intro']['end'] + 0.1:
             return 'moving'
     if cam.get('outro'):
-        e = DUR - cam['outro']['hold']
-        st_ = e - cam['outro']['dur']
-        if t >= e - 0.02:
+        if t >= cam['outro']['end'] - 0.02:
             return 'zoomed'
-        if t > st_ - 0.1:
+        if t > cam['outro']['start'] - 0.1:
             return 'moving'
     return 'neutral'
+
+# ---------- structure: the comp must contain exactly the layers the plan calls for ----------
+config = json.loads((round_dir / 'config.json').read_text())
+if 'layers' in result:
+    lays = result['layers']
+    def count_pref(pref):
+        return sum(1 for l in lays if l['comment'].startswith(pref))
+    if count_pref('wallmaker-controls') != 1:
+        fail('expected exactly one Controls null')
+    if count_pref('wallmaker-screen') != n:
+        fail(f"{count_pref('wallmaker-screen')} screen layers, plan has {n}")
+    for pref, want, what in [
+        ('wallmaker-bg', 1 if wall['bg']['mode'] != 'transparent' else 0, 'Background'),
+        ('wallmaker-staticlayer', 1 if wall['bg']['mode'] == 'static' else 0, 'Static'),
+        ('wallmaker-borders', 1 if wall.get('borders') else 0, 'Borders'),
+        ('wallmaker-scanlines', 1 if wall.get('scanlines') else 0, 'Scanlines'),
+        ('wallmaker-focus', 1 if wall.get('focus') else 0, 'Focus null'),
+        ('wallmaker-label ', n if wall.get('labels') else 0, 'labels'),
+    ]:
+        got = count_pref(pref)
+        if got != want:
+            fail(f'{what}: {got} layer(s), expected {want}')
+    print(f'  structure: {len(lays)} layers match the plan — ok')
+
+# heroes must actually be planned when requested (the grid always fits them in these rounds)
+requested_heroes = config.get('heroes', 0)
+planned_heroes = sum(1 for sc in wall['screens'] if sc.get('span', 1) == 2 and not sc.get('featured'))
+if requested_heroes and planned_heroes != requested_heroes:
+    fail(f'{planned_heroes} hero screens planned, requested {requested_heroes}')
 
 # ---------- probes: post-expression opacity of every screen ----------
 spec_by_idx = {s['i']: s for s in wall['screens']}
 assert len(result['probes']) >= 3, 'expected 3 probe times'
+dropout_rate = rv.get('dropouts', 0)
+blips = 0
+alive_checks = 0
 for tkey, probe in result['probes'].items():
     t = float(tkey)
     assert len(probe) == n, f'probe t={t}: {len(probe)} screens, expected {n}'
     checked = skipped = 0
     for row in probe:
         s = spec_by_idx[row['idx']]
+        op = row['opacity']
+        if s.get('featured'):
+            checked += 1
+            if abs(op - 100.0) > 0.6:
+                fail(f't={t} featured screen {row["idx"]}: opacity {op:.2f}, expected always-on 100')
+            continue
         dead = s['dead'] * 100 < rv['deadPct']
         on_time = rv['start'] + s['th'] / 100 * rv['duration']
-        op = row['opacity']
         if dead:
             expected = 0.0
         elif t < on_time - 0.05:
@@ -73,14 +107,26 @@ for tkey, probe in result['probes'].items():
             skipped += 1
             continue
         checked += 1
+        if expected == 100.0:
+            alive_checks += 1
+            if dropout_rate > 0 and op <= 0.5:
+                blips += 1  # a running screen mid-dropout — counted, bounded below
+                continue
         if abs(op - expected) > 0.6:
             fail(f't={t} screen {row["idx"]} ({row["name"]}): opacity {op:.2f}, expected {expected}')
     print(f'  probe t={t}: {checked} screens checked, {skipped} in transition — ok' if not failures else f'  probe t={t}: checked {checked}')
+if dropout_rate > 0:
+    hi = max(3, round(alive_checks * 0.18))
+    if not (1 <= blips <= hi):
+        fail(f'dropouts at {dropout_rate}%: {blips} blipped screens across probes, expected 1..{hi} of {alive_checks}')
+    else:
+        print(f'  dropouts: {blips}/{alive_checks} running screens mid-blip — ok')
 
 # fully-on counts at the middle probe time must match the plan exactly
 mid_key = sorted(result['probes'], key=float)[1]
 mid_t = float(mid_key)
 actual_on = sum(1 for row in result['probes'][mid_key] if row['opacity'] >= 99.5)
+mid_blip_slack = max(3, round(n * 0.1)) if dropout_rate > 0 else 0
 expected_on = sum(
     1 for s in wall['screens']
     if not (s['dead'] * 100 < rv['deadPct']) and mid_t > rv['start'] + s['th'] / 100 * rv['duration'] + EPS
@@ -89,6 +135,7 @@ expected_max = sum(
     1 for s in wall['screens']
     if not (s['dead'] * 100 < rv['deadPct']) and mid_t > rv['start'] + s['th'] / 100 * rv['duration'] - 0.05
 )
+expected_on -= mid_blip_slack
 if not (expected_on <= actual_on <= expected_max):
     fail(f'fully-on count at t={mid_t}: {actual_on}, expected between {expected_on} and {expected_max}')
 else:
@@ -164,6 +211,30 @@ for tkey, probe in result['probes'].items():
             if sum(mean) / 3 > 82:
                 fail(f'snap t={t} screen {s["i"]}: off but bright (mean {tuple(round(m) for m in mean)}, bg {bg})')
             checked += 1
+    if checked < max(1, n * 0.4):
+        fail(f'snap t={t}: only {checked}/{n} cells were checkable — the pixel verification has gone vacuous')
+    # big rounded corners must actually cut the video: the cell's corner shows background, not clip
+    if wall['cornerRadius'] >= 20:
+        pos_by_idx = {row['idx']: row['pos'] for row in probe}
+        corners = 0
+        for s in wall['screens']:
+            span = s.get('span', 1)
+            name = wall['videos'][s['v']]['name']
+            pos = pos_by_idx[s['i']]
+            # far from the wall center so the Focus zoom cannot let a neighbor cover this corner
+            if op_by_idx[s['i']] < 99.5 or name not in colors or math.hypot(*pos) < 800:
+                continue
+            w_ = g['cellW'] * span + g['gap'] * (span - 1)
+            h_ = g['cellH'] * span + g['gap'] * (span - 1)
+            cx_ = wall['frame']['w'] / 2 + pos[0]
+            cy_ = wall['frame']['h'] / 2 + pos[1]
+            got = img.getpixel((int(cx_ - w_ / 2 + 3), int(cy_ - h_ / 2 + 3)))
+            want = hex_rgb(colors[name])
+            if all(abs(gc - wc) <= 60 for gc, wc in zip(got, want)):
+                fail(f'snap t={t} screen {s["i"]}: corner pixel {got} still shows the clip {want} — corners are not rounded')
+            corners += 1
+        if corners:
+            print(f'  corner radius: {corners} screen corners verified cut')
     print(f'  snapshot t={t}: {checked} cell centers verified')
 
 # ---------- focus spotlight: screens close to the (unmoved) Focus null must render larger ----------

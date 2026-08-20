@@ -55,7 +55,7 @@ export function SourcesPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<C
             <span className="upl-name" title={`comp id ${c.id}`}>
               {c.name}
             </span>
-            <button type="button" className="x" aria-label={`Remove ${c.name}`} onClick={() => patch({ comps: cfg.comps.filter((_, j) => j !== i) })}>
+            <button type="button" className="x" aria-label={`Remove ${c.name}`} onClick={() => src.removeComp(i)}>
               ×
             </button>
           </div>
@@ -65,7 +65,7 @@ export function SourcesPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<C
             <span className="upl-name" title={p}>
               {basename(p)}
             </span>
-            <button type="button" className="x" aria-label={`Remove ${basename(p)}`} onClick={() => patch({ videos: cfg.videos.filter((_, j) => j !== i) })}>
+            <button type="button" className="x" aria-label={`Remove ${basename(p)}`} onClick={() => src.removeVideo(i)}>
               ×
             </button>
           </div>

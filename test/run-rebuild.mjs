@@ -31,7 +31,7 @@ const base = {
   screenAnim: 'fade', screenAnimFrames: 6, jitter: 0.2, deadPct: 0, dropouts: 0, seed: 3,
   focus: true, focusRadius: 400, focusZoom: 140, focusDim: 20,
 }
-const second = { ...base, rows: 5, cols: 5, labels: true, borders: true, borderWidth: 2, borderColor: '#303030', focus: false, videos: clips(8) }
+const second = { ...base, rows: 5, cols: 5, labels: true, borders: true, borderWidth: 2, borderColor: '#303030', focus: false, videos: clips(8), revealStart: 1.7 }
 
 for (const [name, cfg] of [['wall1', base], ['wall2', second]]) {
   const cfgPath = join(dir, `${name}-cfg.json`)
@@ -69,7 +69,7 @@ try {
   userLayer.comment = 'mine';
   // -- rebuild with different settings, same comp name
   var fin2 = BUILD(${JSON.stringify(join(dir, 'wall2.json'))});
-  var comps = 0, screens = 0, labels = 0, borders = 0, userSeen = false, focusSeen2 = false, gapVal = -1;
+  var comps = 0, screens = 0, labels = 0, borders = 0, userSeen = false, focusSeen2 = false, gapVal = -1, revealVal = -1;
   var items = app.project.items;
   for (var k = 1; k <= items.length; k++) if (items[k] instanceof CompItem && items[k].name === ${j(base.compName)}.replace(/"/g, '')) comps++;
   var c2 = findComp(${j(base.compName)}.replace(/"/g, ''));
@@ -82,7 +82,9 @@ try {
     if (l.name === 'user layer') userSeen = true;
     if (l.name === 'Wallmaker Focus') focusSeen2 = true;
     if (l.name === 'Wallmaker Controls') gapVal = l.property('ADBE Effect Parade').property('Gap (px)').property(1).value;
+    if (l.name === 'Wallmaker Controls') revealVal = l.property('ADBE Effect Parade').property('Reveal start (s)').property(1).value;
   }
+  var pr = WALLMAKER_JSON.parse(WALLMAKER.probe(WALLMAKER_JSON.stringify({ compName: ${j(base.compName)}.replace(/"/g, ''), time: 6 })));
   // -- remove the build entirely
   var rem = WALLMAKER_JSON.parse(WALLMAKER.remove(WALLMAKER_JSON.stringify({ buildKey: ${j(wall2.buildKey)}.replace(/"/g, '') })));
   var compsAfter = 0;
@@ -91,7 +93,7 @@ try {
   WRITE('result.json', WALLMAKER_JSON.stringify({
     ok: true, fin1: fin1, fin2: fin2,
     sameCompId: sameId, comps: comps, screens: screens, labels: labels, borders: borders,
-    userSeen: userSeen, focusSeen1: focusSeen1, focusSeen2: focusSeen2, gapVal: gapVal,
+    userSeen: userSeen, focusSeen1: focusSeen1, focusSeen2: focusSeen2, gapVal: gapVal, revealVal: revealVal, probe: pr,
     removed: rem.removed, compsAfter: compsAfter
   }));
 } catch (e) {
@@ -104,15 +106,28 @@ execSync(`osascript -e 'with timeout of 900 seconds' -e 'tell application "${AE}
 const r = JSON.parse(readFileSync(join(dir, 'result.json'), 'utf8'))
 if (!r.ok) throw new Error(`Round E failed in AE: ${r.error}`)
 
+// the rebuilt screens must sit on wall2's 5x5 grid -- with the user's Gap=33 (their slider survives,
+// so the live position expressions use 33 while cell sizes come from wall2's plan)
+const g2 = wall2.grid
+const posOk = (r.probe ?? []).every((row) => {
+  const spec = wall2.screens.find((s) => s.i === row.idx)
+  const gap = 33
+  const ex = (spec.col + (spec.span - 1) / 2 - (g2.cols - 1) / 2) * (g2.cellW + gap)
+  const ey = (spec.row + (spec.span - 1) / 2 - (g2.rows - 1) / 2) * (g2.cellH + gap)
+  return Math.abs(row.pos[0] - ex) < 0.6 && Math.abs(row.pos[1] - ey) < 0.6
+})
+
 const checks = [
   ['first build: 12 screens', r.fin1.screens === 12],
   ['second build: 25 screens', r.fin2.screens === 25 && r.screens === 25],
+  ["rebuilt screens sit on wall2's grid (with the user's kept Gap=33)", posOk && (r.probe ?? []).length === 25],
   ['comp item identity preserved', r.sameCompId === true],
   ['exactly one comp with that name', r.comps === 1 && r.fin2.compName === base.compName],
   ['labels appeared on rebuild', r.labels === 25],
   ['borders layer appeared on rebuild', r.borders === 1],
   ["user's own layer survived", r.userSeen === true],
   ["user's slider value survived (33)", Math.abs(r.gapVal - 33) < 0.01],
+  ['untouched slider followed the panel (Reveal start 0.3 → 1.7)', Math.abs(r.revealVal - 1.7) < 0.01],
   ['focus null existed after build 1', r.focusSeen1 === true],
   ['stale focus null removed when the feature is off', r.focusSeen2 === false],
   ['remove() removed the build', r.removed === true && r.compsAfter === 0],

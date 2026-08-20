@@ -128,7 +128,7 @@ $.global.WALLMAKER = (function () {
       'function C(nm, df) {\n' +
       '  var v = df;\n' +
       '  try { v = thisComp.layer(' + q(CTL) + ').effect(nm)(1).value; }\n' +
-      '  catch (e) { try { var n = thisLayer; while (n.parent != null) { n = n.parent; } v = n.effect(nm)(1).value; } catch (e2) {} }\n' +
+      '  catch (e) { try { var n = thisLayer; while (n.hasParent) { n = n.parent; } v = n.effect(nm)(1).value; } catch (e2) {} }\n' +
       '  return v;\n' +
       '}\n'
     );
@@ -159,7 +159,7 @@ $.global.WALLMAKER = (function () {
   }
 
   function scaleExpr(bsx, bsy, screen) {
-    var pop = st.data.reveal.style === 'pop';
+    var pop = st.data.reveal.style === 'pop' && !screen.featured;
     var body = exprLib() + 'var m = C(' + q('Screen scale (%)') + ', 100) / 100;\nvar e = 1;\n';
     if (pop) {
       body +=
@@ -188,6 +188,28 @@ $.global.WALLMAKER = (function () {
 
   function opacityExpr(screen) {
     var r = st.data.reveal;
+    if (screen.featured) {
+      // pinned means PINNED: only the master opacity slider (and the focus dim) applies
+      var fb = exprLib() + 'var OP = C(' + q('Screens opacity (%)') + ', 100);\nvar on = 1;\n';
+      if (st.data.focus) {
+        fb +=
+          'var fd = 1;\n' +
+          'try {\n' +
+          '  var FL = thisComp.layer(' + q(FOCUS) + ');\n' +
+          '  var FR = Math.max(1, C(' + q('Focus radius (px)') + ', ' + num(st.data.focus.radius, 400) + '));\n' +
+          '  var DM = C(' + q('Focus dim (%)') + ', ' + num(st.data.focus.dim, 0) + ') / 100;\n' +
+          '  var dv = transform.position - FL.transform.position;\n' +
+          '  var dd = Math.sqrt(dv[0] * dv[0] + dv[1] * dv[1]);\n' +
+          '  var fk = Math.max(0, 1 - dd / FR);\n' +
+          '  fk = fk * fk * (3 - 2 * fk);\n' +
+          '  fd = 1 - Math.min(1, Math.max(0, DM)) * (1 - fk);\n' +
+          '} catch (eF) {}\n' +
+          'on * OP * fd';
+      } else {
+        fb += 'on * OP';
+      }
+      return fb;
+    }
     var style = r.style;
     var body =
       exprLib() +
@@ -301,14 +323,73 @@ $.global.WALLMAKER = (function () {
 
   // ---------------------------------------------------------------- controls null
 
-  function addSlider(fx, name, val) {
+  /**
+   * The rebuild contract for the Controls null: a JSON record after '|' in its comment remembers
+   * every value WE last wrote. On rebuild, a slider the user never touched (no keyframes, value
+   * still equals our record) FOLLOWS the panel; a slider the user changed or keyframed is theirs
+   * and is left alone. Disabled features get their sliders removed so stale values can't leak
+   * into expressions (e.g. dropouts turned off but the old slider still reading 20).
+   */
+  function ctlRecord(ctl) {
+    var c = String(ctl.comment || '');
+    var i = c.indexOf('|');
+    if (i < 0) return {};
+    var rec = null;
+    try {
+      rec = J.parse(c.substring(i + 1));
+    } catch (e) {}
+    return rec || {};
+  }
+  function setCtlRecord(ctl, rec) {
+    var c = String(ctl.comment || '');
+    var i = c.indexOf('|');
+    var base = i < 0 ? c : c.substring(0, i);
+    ctl.comment = base + '|' + J.stringify(rec);
+  }
+  function hasCamMark(ctl) {
+    var c = String(ctl.comment || '');
+    var i = c.indexOf('|');
+    return (i < 0 ? c : c.substring(0, i)).indexOf(' cam') >= 0;
+  }
+  function setCamMark(ctl, on) {
+    var c = String(ctl.comment || '');
+    var i = c.indexOf('|');
+    var base = (i < 0 ? c : c.substring(0, i)).replace(' cam', '');
+    if (on) base = base + ' cam';
+    ctl.comment = base + (i < 0 ? '' : c.substring(i));
+  }
+
+  function addSlider(fx, name, val, rec) {
     for (var i = 1; i <= fx.numProperties; i++) {
-      if (fx.property(i).name === name) return fx.property(i); // rebuild: keep the user's value / keyframes
+      if (fx.property(i).name === name) {
+        var prop = fx.property(i).property(1);
+        var prev = rec[name];
+        var untouched = prop.numKeys === 0 && typeof prev === 'number' && Math.abs(prop.value - prev) < 0.005;
+        if (untouched) {
+          try {
+            prop.setValue(val);
+            rec[name] = val;
+          } catch (eU) {}
+        }
+        return fx.property(i);
+      }
     }
     var e = fx.addProperty('ADBE Slider Control');
     e.name = name;
     e.property(1).setValue(val);
+    rec[name] = val;
     return e;
+  }
+
+  function removeSlider(fx, name, rec) {
+    for (var i = fx.numProperties; i >= 1; i--) {
+      if (fx.property(i).name === name) {
+        try {
+          fx.property(i).remove();
+        } catch (eR) {}
+      }
+    }
+    delete rec[name];
   }
 
   function ensureControls(comp) {
@@ -334,23 +415,47 @@ $.global.WALLMAKER = (function () {
       ctl.inPoint = 0;
       ctl.outPoint = comp.duration; // a kept null must span a comp that grew on rebuild
     } catch (eSpan) {}
+    var rec = ctlRecord(ctl);
+    st.ctlRec = rec;
+    // a resized comp on rebuild: re-center the wall -- unless the user moved/keyframed the null
+    var posP = tf(ctl).property('ADBE Position');
+    var wantC = [d.frame.w / 2, d.frame.h / 2];
+    var posUntouched = posP.numKeys === 0 && typeof rec.__cx === 'number' && Math.abs(posP.value[0] - rec.__cx) < 0.5 && Math.abs(posP.value[1] - rec.__cy) < 0.5;
+    if (posUntouched && (posP.value[0] !== wantC[0] || posP.value[1] !== wantC[1])) {
+      try {
+        posP.setValue(wantC);
+      } catch (ePos) {}
+    }
+    if (posP.numKeys === 0 && (typeof rec.__cx !== 'number' || posUntouched)) {
+      rec.__cx = wantC[0];
+      rec.__cy = wantC[1];
+    }
     var fx = ctl.property('ADBE Effect Parade');
-    addSlider(fx, 'Reveal start (s)', num(d.reveal.start, 0));
-    addSlider(fx, 'Reveal duration (s)', num(d.reveal.duration, 0));
-    addSlider(fx, 'Turn-on (frames)', num(d.reveal.animFrames, 8));
-    addSlider(fx, 'Dead screens (%)', num(d.reveal.deadPct, 0));
-    addSlider(fx, 'Gap (px)', num(d.grid.gap, 0));
-    addSlider(fx, 'Screen scale (%)', 100);
-    addSlider(fx, 'Screens opacity (%)', 100);
-    if (d.labels) addSlider(fx, 'Label opacity (%)', 100);
-    if (d.bg.mode === 'static') addSlider(fx, 'Static brightness (%)', num(d.bg.staticBrightness, 14));
-    if (d.reveal.dropouts > 0) addSlider(fx, 'Dropouts (%)', num(d.reveal.dropouts, 0));
-    if (d.borders) addSlider(fx, 'Border (px)', num(d.borders.width, 2));
-    if (d.scanlines) addSlider(fx, 'Scanlines (%)', num(d.scanlines.strength, 25));
+    addSlider(fx, 'Reveal start (s)', num(d.reveal.start, 0), rec);
+    addSlider(fx, 'Reveal duration (s)', num(d.reveal.duration, 0), rec);
+    addSlider(fx, 'Turn-on (frames)', num(d.reveal.animFrames, 8), rec);
+    addSlider(fx, 'Dead screens (%)', num(d.reveal.deadPct, 0), rec);
+    addSlider(fx, 'Gap (px)', num(d.grid.gap, 0), rec);
+    addSlider(fx, 'Screen scale (%)', 100, rec);
+    addSlider(fx, 'Screens opacity (%)', 100, rec);
+    if (d.labels) addSlider(fx, 'Label opacity (%)', 100, rec);
+    else removeSlider(fx, 'Label opacity (%)', rec);
+    if (d.bg.mode === 'static') addSlider(fx, 'Static brightness (%)', num(d.bg.staticBrightness, 14), rec);
+    else removeSlider(fx, 'Static brightness (%)', rec);
+    if (d.reveal.dropouts > 0) addSlider(fx, 'Dropouts (%)', num(d.reveal.dropouts, 0), rec);
+    else removeSlider(fx, 'Dropouts (%)', rec);
+    if (d.borders) addSlider(fx, 'Border (px)', num(d.borders.width, 2), rec);
+    else removeSlider(fx, 'Border (px)', rec);
+    if (d.scanlines) addSlider(fx, 'Scanlines (%)', num(d.scanlines.strength, 25), rec);
+    else removeSlider(fx, 'Scanlines (%)', rec);
     if (d.focus) {
-      addSlider(fx, 'Focus radius (px)', num(d.focus.radius, 400));
-      addSlider(fx, 'Focus zoom (%)', num(d.focus.zoom, 135));
-      addSlider(fx, 'Focus dim (%)', num(d.focus.dim, 0));
+      addSlider(fx, 'Focus radius (px)', num(d.focus.radius, 400), rec);
+      addSlider(fx, 'Focus zoom (%)', num(d.focus.zoom, 135), rec);
+      addSlider(fx, 'Focus dim (%)', num(d.focus.dim, 0), rec);
+    } else {
+      removeSlider(fx, 'Focus radius (px)', rec);
+      removeSlider(fx, 'Focus zoom (%)', rec);
+      removeSlider(fx, 'Focus dim (%)', rec);
     }
     return ctl;
   }
@@ -427,7 +532,7 @@ $.global.WALLMAKER = (function () {
     if (!st.footFolder) return;
     for (var i = 1; i <= st.footFolder.numItems; i++) {
       var it = st.footFolder.item(i);
-      if (it instanceof FootageItem && it.mainSource && it.mainSource.file) {
+      if (it instanceof FootageItem && it.mainSource && it.mainSource.file && !it.footageMissing) {
         try {
           prepareFootage(it.mainSource.file.fsName.replace(/\\/g, '/'), it);
         } catch (e) {}
@@ -464,7 +569,13 @@ $.global.WALLMAKER = (function () {
     } else {
       sx = sy = Math.max(cw / sw, ch / sh);
     }
-    var layer = st.main.layers.add(it);
+    var layer;
+    try {
+      layer = st.main.layers.add(it); // can throw on circular comp nesting -- that source is skipped, not the build
+    } catch (eAdd) {
+      st.skipped.push(vid.name + ' (' + String(eAdd && eAdd.message ? eAdd.message : eAdd) + ')');
+      return;
+    }
     layer.name = 'Screen ' + pad3(idx + 1, st.padWidth) + ' \u00b7 ' + vid.name;
     layer.comment = TAG + '-screen ' + idx;
 
@@ -522,7 +633,7 @@ $.global.WALLMAKER = (function () {
     sclP.expression = scaleExpr(sx * 100, sy * 100, s);
     tf(layer).property('ADBE Opacity').expression = opacityExpr(s);
 
-    if (d.labels) buildLabel(idx, layer, sx, sy, vw, vh, x0, y0);
+    if (d.labels) buildLabel(idx, layer, sx, sy, cw, ch, sw, sh);
     st.built++;
   }
 
@@ -534,7 +645,7 @@ $.global.WALLMAKER = (function () {
     l.comment = TAG + '-labeltpl';
     l.enabled = false;
     var td = l.property('ADBE Text Properties').property('ADBE Text Document').value;
-    td.fontSize = Math.max(7, Math.min(72, Math.round(d.grid.cellH * 0.14)));
+    td.fontSize = Math.max(7, Math.min(72, Math.round(Math.min(d.grid.cellW, d.grid.cellH) * 0.14)));
     td.applyFill = true;
     td.fillColor = [1, 1, 1];
     td.applyStroke = false;
@@ -551,7 +662,11 @@ $.global.WALLMAKER = (function () {
     return l;
   }
 
-  function buildLabel(idx, screenLayer, sx, sy, vw, vh, x0, y0) {
+  /** The CAM tag sits at the CELL's bottom-left (a bezel label), whatever the fit mode --
+   *  in 'contain' the video strip may not reach the cell edges, and the label must not
+   *  end up floating over the middle of the picture. Positions are in the parent screen
+   *  layer's source space; the label's own scale cancels the parent's so text stays 1:1. */
+  function buildLabel(idx, screenLayer, sx, sy, cw, ch, sw, sh) {
     var d = st.data;
     var tpl = labelTemplate();
     var l = tpl.duplicate();
@@ -562,8 +677,8 @@ $.global.WALLMAKER = (function () {
     var prefix = d.labels && d.labels.prefix ? d.labels.prefix : 'CAM';
     l.property('ADBE Text Properties').property('ADBE Text Document').expression = q(prefix + ' ' + pad3(idx + 1, st.padWidth));
     l.parent = screenLayer;
-    var pad = Math.max(2, d.grid.cellH * 0.07);
-    tf(l).property('ADBE Position').setValue([x0 + pad / sx, y0 + vh - pad / sy]);
+    var pad = Math.max(2, Math.min(cw, ch) * 0.07);
+    tf(l).property('ADBE Position').setValue([sw / 2 - (cw / 2 - pad) / sx, sh / 2 + (ch / 2 - pad) / sy]);
     tf(l).property('ADBE Scale').setValue([100 / sx, 100 / sy]);
     tf(l).property('ADBE Opacity').expression = labelOpacityExpr();
   }
@@ -730,16 +845,20 @@ $.global.WALLMAKER = (function () {
     var cam = d.camera;
     var sp = tf(ctl).property('ADBE Scale');
     var pp = tf(ctl).property('ADBE Position');
-    var ownedBefore = ctl.comment.indexOf(' cam') >= 0;
+    var ownedBefore = hasCamMark(ctl);
     if (!cam) {
       if (ownedBefore) {
         try {
           while (sp.numKeys > 0) sp.removeKey(1);
           while (pp.numKeys > 0) pp.removeKey(1);
           sp.setValue([100, 100]);
-          tf(ctl).property('ADBE Position').setValue([d.frame.w / 2, d.frame.h / 2]);
+          pp.setValue([d.frame.w / 2, d.frame.h / 2]);
+          if (st.ctlRec) {
+            st.ctlRec.__cx = d.frame.w / 2;
+            st.ctlRec.__cy = d.frame.h / 2;
+          }
         } catch (e0) {}
-        ctl.comment = ctl.comment.replace(' cam', '');
+        setCamMark(ctl, false);
       }
       return;
     }
@@ -753,24 +872,17 @@ $.global.WALLMAKER = (function () {
       var homeS = [100, 100];
       var homeP = [W / 2, H / 2];
       var zoomS = [k, k];
-      var D = d.durationSec;
+      // the plan carries ABSOLUTE, already-clamped key times (src/core/reveal.ts planCamera):
+      // the preview plays the same numbers, so AE and the panel cannot disagree
       var keys = [];
-      var introEnd = 0;
       if (cam.intro) {
-        var h1 = Math.min(cam.intro.hold, Math.max(0, D - 0.2));
-        var e1 = Math.min(h1 + cam.intro.dur, D);
-        if (h1 > 0) keys.push({ t: 0, s: zoomS, p: zoomP });
-        keys.push({ t: h1, s: zoomS, p: zoomP });
-        keys.push({ t: e1, s: homeS, p: homeP });
-        introEnd = e1;
+        if (cam.intro.hold > 0) keys.push({ t: 0, s: zoomS, p: zoomP });
+        keys.push({ t: cam.intro.hold, s: zoomS, p: zoomP });
+        keys.push({ t: cam.intro.end, s: homeS, p: homeP });
       }
       if (cam.outro) {
-        var tEnd = Math.max(introEnd + 0.2, D - cam.outro.hold);
-        var tStart = Math.max(introEnd + 0.1, tEnd - cam.outro.dur);
-        if (tStart < D) {
-          keys.push({ t: tStart, s: homeS, p: homeP });
-          keys.push({ t: Math.min(tEnd, D), s: zoomS, p: zoomP });
-        }
+        keys.push({ t: cam.outro.start, s: homeS, p: homeP });
+        keys.push({ t: cam.outro.end, s: zoomS, p: zoomP });
       }
       var ease = new KeyframeEase(0, 75);
       for (var i = 0; i < keys.length; i++) {
@@ -793,7 +905,11 @@ $.global.WALLMAKER = (function () {
           pp.setSpatialTangentsAtKey(m, [0, 0], [0, 0]);
         } catch (eE3) {}
       }
-      if (!ownedBefore) ctl.comment = ctl.comment + ' cam';
+      if (st.ctlRec) {
+        st.ctlRec.__cx = homeP[0];
+        st.ctlRec.__cy = homeP[1];
+      }
+      setCamMark(ctl, true);
     } catch (eCam) {}
   }
 
@@ -829,11 +945,26 @@ $.global.WALLMAKER = (function () {
         bgLayer: null,
         staticLayer: null,
         labelTpl: null,
+        ctlRec: null,
         bordersLayer: null,
         scanLayer: null,
         focusNull: null,
         padWidth: String(data.screens.length).length > 2 ? String(data.screens.length).length : 2
       };
+      // refuse a foreign comp-name clash BEFORE creating anything (no orphan folders on error)
+      var preExisting = null;
+      var itemsPre = app.project.items;
+      for (var pi = 1; pi <= itemsPre.length; pi++) {
+        var pc = itemsPre[pi];
+        if (pc instanceof CompItem && pc.comment === TAG + '-comp ' + data.buildKey) {
+          preExisting = pc;
+          break;
+        }
+      }
+      if (!preExisting) {
+        var clash0 = findCompByName(data.compName);
+        if (clash0 && !isOurs(clash0)) throw new Error('A comp named "' + data.compName + '" already exists in this project (not built by Wallmaker). Pick another comp name.');
+      }
       var root = findRoot(data.buildKey);
       if (!root) {
         root = app.project.items.addFolder('Wallmaker \u00b7 ' + data.compName);
@@ -854,19 +985,7 @@ $.global.WALLMAKER = (function () {
 
       // the main comp: reuse the item on a rebuild (it stays valid wherever it is already used,
       // even if the user moved it out of our folder) -- found by its tagged comment, not its name
-      var main = null;
-      var itemsAll = app.project.items;
-      for (var j = 1; j <= itemsAll.length; j++) {
-        var c = itemsAll[j];
-        if (c instanceof CompItem && c.comment === TAG + '-comp ' + data.buildKey) {
-          main = c;
-          break;
-        }
-      }
-      if (!main) {
-        var clash = findCompByName(data.compName);
-        if (clash && !isOurs(clash)) throw new Error('A comp named "' + data.compName + '" already exists in this project (not built by Wallmaker). Pick another comp name.');
-      }
+      var main = preExisting;
       var dur = Math.max(1 / data.fps, data.durationSec);
       if (!main) {
         main = app.project.items.addComp(data.compName, data.frame.w, data.frame.h, 1, dur, data.fps);
@@ -888,6 +1007,7 @@ $.global.WALLMAKER = (function () {
       st.main = main;
       st.ctl = ensureControls(main);
       applyCamera(st.ctl);
+      setCtlRecord(st.ctl, st.ctlRec || {});
       st.focusNull = ensureFocusNull(main);
       buildBackground();
       buildBorders();
@@ -1069,5 +1189,18 @@ $.global.WALLMAKER = (function () {
     });
   }
 
-  return { info: info, begin: begin, step: step, finish: finish, remove: removeBuild, selectedSources: selectedSources, snapshot: snapshot, probe: probe, ctlState: ctlState, version: VERSION };
+  /** Name/comment/enabled of every layer in a comp (structure verification in the tests). */
+  function layersInfo(json) {
+    var a = args(json);
+    var comp = findCompByName(String(a.compName));
+    if (!comp) throw new Error('Comp not found: ' + a.compName);
+    var out = [];
+    for (var i = 1; i <= comp.numLayers; i++) {
+      var l = comp.layer(i);
+      out.push({ name: l.name, comment: String(l.comment || ''), enabled: l.enabled });
+    }
+    return reply(out);
+  }
+
+  return { info: info, begin: begin, step: step, finish: finish, remove: removeBuild, selectedSources: selectedSources, snapshot: snapshot, probe: probe, ctlState: ctlState, layers: layersInfo, version: VERSION };
 })();

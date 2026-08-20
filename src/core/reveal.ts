@@ -33,7 +33,7 @@ function orderValue(mode: Config['reveal'], row: number, col: number, rows: numb
 
 /** The config the wall actually runs with: animation off = every screen simply on from frame 1. */
 export function withAnimation(cfg: Config): Config {
-  return cfg.animate ? cfg : { ...cfg, reveal: 'none', revealStart: 0, screenAnim: 'cut', deadPct: cfg.deadPct }
+  return cfg.animate ? cfg : { ...cfg, reveal: 'none', revealStart: 0, revealDuration: 0, screenAnim: 'cut' }
 }
 
 /** Plan every screen. Deterministic from cfg.seed; each concern gets its own RNG stream so e.g. re-seeding the order keeps the video assignment readable. */
@@ -128,8 +128,10 @@ export interface CameraPlan {
   p: [number, number]
   /** Controls-null scale (%) at which the target screen fills the comp */
   scale: number
-  intro: { hold: number; dur: number } | null
-  outro: { hold: number; dur: number } | null
+  /** zoomed from 0 until `hold`, fully home at `end` — ABSOLUTE seconds, already clamped to the comp */
+  intro: { hold: number; end: number } | null
+  /** home until `start`, fully zoomed at `end` (stays zoomed after) — absolute, clamped past the intro */
+  outro: { start: number; end: number } | null
 }
 
 /** The camera move (if any): which screen it locks onto and how far in it must be to fill the comp. */
@@ -154,6 +156,24 @@ export function planCamera(cfg: Config, grid: GridSpec, screens: ScreenSpec[]): 
   const t = screens[target]
   const w = grid.cellW * t.span + cfg.gap * (t.span - 1)
   const h = grid.cellH * t.span + cfg.gap * (t.span - 1)
+  // clamp both moves to the comp HERE, once — the host writes keyframes and the preview plays
+  // from these same absolute times, so they cannot disagree on degenerate configs
+  const D = cfg.durationSec
+  let intro: CameraPlan['intro'] = null
+  let introEnd = 0
+  if (cfg.intro === 'zoomOut') {
+    const hold = Math.min(Math.max(0, cfg.introHold), Math.max(0, D - 0.2))
+    const end = Math.min(hold + Math.max(0.1, cfg.introDur), D)
+    intro = { hold: r2(hold), end: r2(end) }
+    introEnd = end
+  }
+  let outro: CameraPlan['outro'] = null
+  if (cfg.outro === 'zoomIn') {
+    const end = Math.min(Math.max(introEnd + 0.2, D - Math.max(0, cfg.outroHold)), D)
+    const start = Math.max(introEnd + 0.1, end - Math.max(0.1, cfg.outroDur))
+    if (start < D) outro = { start: r2(start), end: r2(end) }
+  }
+  if (!intro && !outro) return null
   return {
     target,
     p: [
@@ -161,10 +181,12 @@ export function planCamera(cfg: Config, grid: GridSpec, screens: ScreenSpec[]): 
       Math.round(((t.row + (t.span - 1) / 2 - (grid.rows - 1) / 2) * (grid.cellH + cfg.gap)) * 100) / 100,
     ],
     scale: Math.round(Math.max(cfg.compW / w, cfg.compH / h) * 100.2 * 100) / 100,
-    intro: cfg.intro === 'zoomOut' ? { hold: Math.max(0, cfg.introHold), dur: Math.max(0.1, cfg.introDur) } : null,
-    outro: cfg.outro === 'zoomIn' ? { hold: Math.max(0, cfg.outroHold), dur: Math.max(0.1, cfg.outroDur) } : null,
+    intro,
+    outro,
   }
 }
+
+const r2 = (v: number) => Math.round(v * 100) / 100
 
 export interface CameraState {
   /** 1 = neutral */
@@ -183,16 +205,14 @@ export function cameraAt(t: number, cam: CameraPlan | null, durationSec: number)
     const e = u * u * (3 - 2 * u) // approximates the easy-eased keyframes
     return { k: kIn + (1 - kIn) * e, x: zoomed.x * (1 - e), y: zoomed.y * (1 - e) }
   }
+  void durationSec
   if (cam.intro) {
-    const t1 = cam.intro.hold
-    if (t <= t1) return zoomed
-    if (t < t1 + cam.intro.dur) return mix((t - t1) / cam.intro.dur)
+    if (t <= cam.intro.hold) return zoomed
+    if (t < cam.intro.end) return mix((t - cam.intro.hold) / Math.max(0.001, cam.intro.end - cam.intro.hold))
   }
   if (cam.outro) {
-    const tEnd = durationSec - cam.outro.hold
-    const tStart = tEnd - cam.outro.dur
-    if (t >= tEnd) return zoomed
-    if (t > tStart) return mix(1 - (t - tStart) / cam.outro.dur)
+    if (t >= cam.outro.end) return zoomed
+    if (t > cam.outro.start) return mix(1 - (t - cam.outro.start) / Math.max(0.001, cam.outro.end - cam.outro.start))
   }
   return { k: 1, x: 0, y: 0 }
 }
@@ -209,6 +229,7 @@ export interface ScreenState {
  * Flicker uses a per-frame hash so the preview looks like AE's seedRandom without promising bit-parity.
  */
 export function screenStateAt(t: number, s: ScreenSpec, cfg: Config): ScreenState {
+  if (s.featured) return { opacity: 1, scale: 1 } // pinned means PINNED: no reveal gate, no dropouts
   if (s.dead * 100 < cfg.deadPct) return { opacity: 0, scale: 1 }
   const onTime = cfg.revealStart + (s.th / 100) * cfg.revealDuration
   const dt = t - onTime

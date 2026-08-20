@@ -2,7 +2,8 @@ import type { Config } from '../../core/types'
 import { Field, NumberInput, Row, Section, Segmented, Select, Slider, Toggle } from '../controls'
 
 export function RevealPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Config>) => void }) {
-  const animEnd = cfg.revealStart + cfg.revealDuration + cfg.screenAnimFrames / cfg.fps
+  // 'All at once' ignores the spread -- every screen starts at revealStart
+  const animEnd = cfg.revealStart + (cfg.reveal === 'none' ? 0 : cfg.revealDuration) + cfg.screenAnimFrames / cfg.fps
   return (
     <>
       <Section title="Power-on" hint="Off = every screen is simply on from the first frame. On = the wall comes to life screen by screen.">
@@ -26,7 +27,7 @@ export function RevealPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Co
             />
             <Row>
               <NumberInput label="Starts at (s)" value={cfg.revealStart} min={0} max={3600} step={0.1} onChange={(v) => patch({ revealStart: v })} />
-              <NumberInput label="All on within (s)" value={cfg.revealDuration} min={0} max={3600} step={0.1} onChange={(v) => patch({ revealDuration: v })} hint="The total length of the reveal — the last screen starts by then." />
+              {cfg.reveal !== 'none' && <NumberInput label="All on within (s)" value={cfg.revealDuration} min={0} max={3600} step={0.1} onChange={(v) => patch({ revealDuration: v })} hint="The total length of the reveal — the last screen starts by then." />}
             </Row>
             <p className="hint">
               Everything is fully on at <b>{animEnd.toFixed(1)} s</b>{animEnd > cfg.durationSec ? ` — that's after the comp ends (${cfg.durationSec} s)!` : ''} Both times are live sliders on the Controls null in AE.

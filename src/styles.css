@@ -13,7 +13,7 @@
   --line2: rgba(255, 255, 255, 0.13);
   --text: #ececf1;
   --text2: #9c9ca8;
-  --text3: #67676f;
+  --text3: #8b8b97;
   --accent: #86efac;
   --accent-deep: #34d276;
   --accent-ink: #06230f;
@@ -48,7 +48,7 @@ code { background: var(--surface2); padding: 1px 5px; border-radius: 4px; font-s
 }
 .top {
   display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap;
-  padding: 0 12px 0 14px; height: 44px; background: var(--bg1); border-bottom: 1px solid var(--line); flex: 0 0 auto;
+  padding: 6px 12px 6px 14px; min-height: 44px; background: var(--bg1); border-bottom: 1px solid var(--line); flex: 0 0 auto;
 }
 .brand { font-weight: 650; font-size: 13.5px; display: flex; align-items: center; gap: 9px; white-space: nowrap; letter-spacing: -0.01em; }
 .brand .logo { display: flex; color: var(--accent); filter: drop-shadow(0 0 6px rgba(134, 239, 172, 0.35)); }
@@ -282,3 +282,17 @@ pre.help { background: var(--surface); border: 1px solid var(--line); border-rad
 /* ---- crash screen ---- */
 .crash { max-width: 640px; margin: 60px auto; padding: 0 20px; }
 .crash h2 { font-size: 16px; font-weight: 620; margin: 0 0 12px; }
+
+/* the brand tagline is the first thing to go when space runs out */
+@media (max-width: 560px) {
+  .brand .sub { display: none; }
+}
+
+/* ---------- toast ---------- */
+.toast {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 120;
+  background: var(--surface2); border: 1px solid var(--line2); color: var(--text);
+  padding: 8px 14px; border-radius: 999px; font-size: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.5);
+  animation: toast-in .18s ease-out;
+}
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }

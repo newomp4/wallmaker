@@ -1,19 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Config } from '../../core/types'
 import { gridFor } from '../../core/grid'
 import { planScreens, withAnimation } from '../../core/reveal'
 import { buildKeyFor } from '../../core/scene'
 import { isCEP, hostInfo } from '../../ae/cep'
-import { buildInAE, defaultBuildFolder, hostInfoAE, removeBuild, type AEHostInfo, type AEProgress, type AEBuildResult } from '../../ae/build'
+import { buildInAE, defaultBuildFolder, hostInfoAE, removeBuild, type AEHostInfo } from '../../ae/build'
+import { setBuildState, useBuildState } from '../buildStore'
 
 export function BuildPanel({ cfg }: { cfg: Config }) {
   const inAE = isCEP()
   const [info, setInfo] = useState<AEHostInfo | null>(null)
   const [infoErr, setInfoErr] = useState('')
-  const [progress, setProgress] = useState<AEProgress | null>(null)
-  const [result, setResult] = useState<AEBuildResult | null>(null)
-  const [error, setError] = useState('')
-  const busy = useRef(false)
+  const { busy, progress, result, error, removed } = useBuildState()
   const grid = gridFor(cfg)
   const n = planScreens(withAnimation(cfg), grid).length
   const heroCount = cfg.heroes > 0 ? planScreens(withAnimation(cfg), grid).filter((s) => s.span === 2).length : 0
@@ -27,36 +25,31 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
   }, [inAE])
 
   const build = async () => {
-    if (busy.current) return
-    busy.current = true
-    setError('')
-    setResult(null)
+    if (busy) return
+    setBuildState({ busy: true, error: '', result: null, removed: '' })
     try {
       const latest = await hostInfoAE().catch(() => info)
       const folder = defaultBuildFolder(latest, buildKeyFor(cfg.compName))
-      const r = await buildInAE(cfg, { folder }, setProgress)
-      setResult(r)
+      const r = await buildInAE(cfg, { folder }, (p) => setBuildState({ progress: p }))
+      setBuildState({ result: r })
     } catch (e) {
-      setError(String(e instanceof Error ? e.message : e))
-      setProgress(null)
+      setBuildState({ error: String(e instanceof Error ? e.message : e), progress: null })
     } finally {
-      busy.current = false
+      setBuildState({ busy: false })
     }
   }
 
   const remove = async () => {
-    if (busy.current) return
-    busy.current = true
-    setError('')
+    if (busy) return
+    setBuildState({ busy: true, error: '', removed: '' })
     try {
       const r = await removeBuild(buildKeyFor(cfg.compName))
-      setResult(null)
-      setProgress(null)
-      if (!r.removed) setError('No build of this comp name found in the project.')
+      setBuildState({ result: null, progress: null, removed: r.removed ? `Removed “${cfg.compName}” and its Wallmaker folder from the project.` : '' })
+      if (!r.removed) setBuildState({ error: 'No build of this comp name found in the project.' })
     } catch (e) {
-      setError(String(e instanceof Error ? e.message : e))
+      setBuildState({ error: String(e instanceof Error ? e.message : e) })
     } finally {
-      busy.current = false
+      setBuildState({ busy: false })
     }
   }
 
@@ -73,7 +66,7 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
   }
 
   const host = hostInfo()
-  const building = progress && progress.phase !== 'done'
+  const building = busy || (progress && progress.phase !== 'done' && progress.phase !== 'error')
   return (
     <>
       <section className="sec">
@@ -110,6 +103,7 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
           </div>
         )}
         {error && <p className="hint err">{error}</p>}
+        {removed && <p className="hint ok">✓ {removed}</p>}
         {result && (
           <p className="hint ok">
             ✓ Built {result.screens} screens from {result.videos} videos in {result.seconds.toFixed(1)} s.
@@ -139,7 +133,7 @@ function BuildNotes() {
         <li>
           <b>Background</b> / <b>Static</b> — the panel behind the wall; static noise shows wherever screens are off.
         </li>
-        <li>Building again with the same comp name updates the comp in place — the Controls null (your values &amp; keyframes) and your own added layers survive.</li>
+        <li>Building again with the same comp name updates the comp in place. Sliders you changed or keyframed in AE keep your values; untouched sliders follow the panel's new settings. Your own added layers survive.</li>
       </ul>
     </section>
   )
