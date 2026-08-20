@@ -19,7 +19,7 @@ export const DEFAULT_CONFIG: Config = {
   cellAspect: 'fill',
   cellAspectCustom: 1.7778,
 
-  assign: 'sequential',
+  assign: 'shuffle',
   randomStart: true,
   loop: true,
   muteAudio: true,
@@ -42,7 +42,7 @@ export const DEFAULT_CONFIG: Config = {
   revealDuration: 6,
   screenAnim: 'fade',
   screenAnimFrames: 8,
-  jitter: 0.15,
+  jitter: 0.2,
   deadPct: 0,
   seed: 7,
 }

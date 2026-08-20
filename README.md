@@ -8,12 +8,13 @@ Point it at a folder of videos (or select comps right in your project), choose t
 
 **Sources**
 - A folder of videos (searched recursively), individual files, drag & drop — or **comps from your open project** ("From selection"): they render live on the wall, no export needed.
-- Fewer sources than screens? They repeat (in order, shuffled evenly, or picked at random).
+- Fewer sources than screens? They repeat — shuffled by default, so duplicates scatter across the wall instead of running in order, and the leftover cells are filled by a random pick rather than always the first few files.
 - Every screen can start at a **random point** in its clip, looped, muted — a wall of one video won't look synchronized.
 
 **The grid**
 - Automatic rows × columns from your source count, or set them yourself — 2×2 to 1000+ screens. Every cell is exactly the same size.
 - **Cell shape lock**: keep every screen 16:9 / 4:3 / 1:1 / 9:16 / custom — the wall centers itself instead of stretching; or fill the comp edge-to-edge.
+- **Fill comp**: a locked cell shape only reaches the comp edges when the grid happens to match the comp's aspect — otherwise you get letterbox bands. The panel tells you how big they are and one click picks the rows × columns that reach the edges with cells that shape.
 - Gap, outer margin, rounded corners. Video fit per screen: Fill (crop), Fit (letterbox) or Stretch.
 - **Arrangements** — one-click grid presets (Auto, Edge to edge, 16:9 cells, 3×3, 4×3, 5×5, Spaced).
 - A **quick bar** under the live preview holds the tune-while-you-watch controls (grid, gap, cell shape, seed).
@@ -26,8 +27,8 @@ Point it at a folder of videos (or select comps right in your project), choose t
 - `Target column` / `Target row` (keyframe them to fly between screens), `Extra scale (%)` and `Pan (px)` layer your own move on top of the zoom.
 
 **The power-on** *(off by default — the base wall is simply on)*
-- Turn on **Animate the power-on** and screens come alive one by one: random, row by row, column by column, reading order, center-out, edges-in, or diagonally — with adjustable randomness, a start time, and one number for how long until **all** screens are on.
-- Per-screen style: **Cut**, **Fade** or **Scale up** — over any number of frames.
+- Turn on **Animate the power-on** and screens come alive one by one: random, row by row, column by column, reading order, snake, center-out, spiral-out, edges-in, or diagonally — with adjustable randomness, a start time, and one number for how long until **all** screens are on.
+- Per-screen style: **Cut**, **Fade**, **Flicker** (stutters on like a tube warming up) or **Scale up** — over any number of frames.
 - **Dead screens**: monitors that never come on, with or without the reveal.
 - Deterministic from a seed; the preview plays exactly what AE will do.
 

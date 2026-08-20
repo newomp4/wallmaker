@@ -112,6 +112,23 @@ for tkey, probe in result['probes'].items():
             fail(f't={t} screen {row["idx"]} ({row["name"]}): opacity {op:.2f}, expected {expected}')
     print(f'  probe t={t}: {checked} screens checked, {skipped} in transition — ok')
 
+# flicker must actually flicker: a screen mid-turn-on lands on a partial opacity, never just 0/100
+if rv['style'] == 'flicker':
+    partials = 0
+    for tkey, probe in result['probes'].items():
+        t = float(tkey)
+        for row in probe:
+            sc = spec_by_idx[row['idx']]
+            if sc.get('featured') or sc['dead'] * 100 < rv['deadPct']:
+                continue
+            on_time = rv['start'] + sc['th'] / 100 * rv['duration']
+            if on_time - 0.05 <= t <= on_time + EPS and 0.5 < row['opacity'] < 99.5:
+                partials += 1
+    if partials == 0:
+        fail('flicker: no screen showed a partial opacity mid-turn-on — the flicker branch never ran')
+    else:
+        print(f'  flicker: {partials} screen-samples caught mid-flicker — ok')
+
 # every screen renders at the same size (identical cells) -- compare same-source screens only,
 # since fit modes scale each source to its own cell differently
 by_source = {}

@@ -195,8 +195,22 @@ $.global.WALLMAKER = (function () {
       'var dead = (' + screen.dead + ' * 100 < C(' + q('Dead screens (%)') + ', ' + num(r.deadPct, 0) + '));\n' +
       'var on = 0;\n' +
       'if (!dead && dt >= 0) {\n';
-    if (r.style === 'fade') body += '  on = p;\n';
-    else body += '  on = 1;\n'; // cut / pop (pop animates on scale)
+    if (r.style === 'fade') {
+      body += '  on = p;\n';
+    } else if (r.style === 'flicker') {
+      // a tube warming up: on/off per frame, settling as p approaches 1
+      body +=
+        '  if (p >= 1) { on = 1; }\n' +
+        '  else {\n' +
+        '    var fr = Math.floor(dt / thisComp.frameDuration);\n' +
+        '    seedRandom(' + screen.i + ' * 971 + fr, true);\n' +
+        '    var r1 = random();\n' +
+        '    var r2 = random();\n' +
+        '    on = (r1 < 0.25 + 0.75 * p * p) ? (0.55 + 0.45 * r2) : 0;\n' +
+        '  }\n';
+    } else {
+      body += '  on = 1;\n'; // cut / pop (pop animates on scale)
+    }
     body += '}\n';
     body += 'on * OP';
     return body;

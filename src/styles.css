@@ -62,11 +62,13 @@ code { background: var(--surface2); padding: 1px 5px; border-radius: 4px; font-s
 .panel-body::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 4px; }
 
 /* ================= tabs ================= */
-.tabs { display: flex; padding: 0 8px; border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+/* narrow panels scroll the tabs sideways rather than wrapping them onto a second line */
+.tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; padding: 0 8px; border-bottom: 1px solid var(--line); flex: 0 0 auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
 .tabs button {
   display: flex; align-items: center; gap: 6px; padding: 10px 10px 8px; background: transparent; border: 0;
   border-bottom: 1px solid transparent; color: var(--text3); font-weight: 500; font-size: 12px; margin-bottom: -1px;
-  transition: color 0.12s;
+  white-space: nowrap; flex: 0 0 auto; transition: color 0.12s;
 }
 .tabs button svg { opacity: 0.7; }
 .tabs button.on { color: var(--text); border-bottom-color: var(--text); }
@@ -105,7 +107,7 @@ code { background: var(--surface2); padding: 1px 5px; border-radius: 4px; font-s
 
 /* ---- quick bar: the tune-while-you-watch strip ---- */
 .quickbar {
-  display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 7px 14px;
+  display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 7px 14px;
   background: var(--bg1); border-top: 1px solid var(--line); flex: 0 0 auto;
 }
 .qb-chip {
@@ -180,6 +182,10 @@ button.icon.primary:hover { background: #fff; color: var(--ink); }
 }
 .field input:hover, .field select:hover { background: var(--surface2); }
 .field input:focus, .field select:focus { outline: none; background: var(--surface); border-color: var(--text3); }
+/* an inline status line with an action on the right (e.g. letterbox bands + "Fill comp") */
+.notice { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0 4px; color: var(--text3); font-size: 11px; }
+.notice .btn { height: 26px; padding: 0 10px; font-size: 11.5px; flex: 0 0 auto; }
+
 .row { display: flex; gap: 8px; align-items: flex-end; }
 .row > * { flex: 1; min-width: 0; }
 .row > .btn { flex: 0 0 auto; margin-bottom: 9px; }

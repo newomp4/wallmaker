@@ -18,7 +18,9 @@ export function AnimatePanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<C
                 { value: 'rows', label: 'Row by row' },
                 { value: 'cols', label: 'Column by column' },
                 { value: 'sequence', label: 'Reading order' },
+                { value: 'snake', label: 'Snake' },
                 { value: 'center', label: 'Center out' },
+                { value: 'spiral', label: 'Spiral out' },
                 { value: 'edges', label: 'Edges in' },
                 { value: 'diagonal', label: 'Diagonal' },
                 { value: 'none', label: 'All at once' },
@@ -39,6 +41,7 @@ export function AnimatePanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<C
                 options={[
                   { value: 'cut', label: 'Cut' },
                   { value: 'fade', label: 'Fade' },
+                  { value: 'flicker', label: 'Flicker', title: 'Stutters on like a tube warming up' },
                   { value: 'pop', label: 'Scale up' },
                 ]}
                 onChange={(v) => patch({ screenAnim: v })}

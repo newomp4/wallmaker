@@ -53,7 +53,7 @@ const ROUNDS = {
     times: [0.5, 4.37, 9.43],
   },
   D: {
-    // rounded corners, a comp as a source, an ordered sweep, an outer margin
+    // rounded corners, a comp as a source, a spiral flicker-on sweep, an outer margin
     cfg: {
       videos: clips(10),
       compName: 'Wallmaker test D',
@@ -62,10 +62,10 @@ const ROUNDS = {
       fill: 'cover', cornerRadius: 26, assign: 'sequential',
       randomStart: true, loop: true, muteAudio: true,
       background: 'solid', bgColor: '#0b0b0e',
-      animate: true, reveal: 'edges', revealStart: 0.4, revealDuration: 4,
-      screenAnim: 'cut', screenAnimFrames: 1, jitter: 0, deadPct: 0, seed: 21,
+      animate: true, reveal: 'spiral', revealStart: 0.4, revealDuration: 4,
+      screenAnim: 'flicker', screenAnimFrames: 10, jitter: 0, deadPct: 0, seed: 21,
     },
-    times: [0.15, 2.4, 7.0],
+    times: [0.15, 1.35, 2.4, 7.0], // three inside the flicker sweep so a mid-flicker sample is never a fluke
     // the runner swaps one video for a freshly created solid-color comp (tests comps as sources)
     compSource: { name: 'WM comp source', hex: '2ECC71' },
   },

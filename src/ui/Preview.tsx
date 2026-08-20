@@ -3,7 +3,7 @@
  * math (`planScreens` / `screenStateAt`) the AE build bakes into expressions. Inside the panel it
  * also pulls one real frame per video (file:// access is enabled for CEP) as screen thumbnails.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Config } from '../core/types'
 import { gridFor } from '../core/grid'
 import { planScreens, planCamera, cameraAt, screenStateAt, withAnimation } from '../core/reveal'
@@ -86,7 +86,13 @@ function tiles(): [string, string] {
 export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partial<Config>) => void }) {
   const src = useSources(rawCfg, patch)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [t, setT] = useState(0)
+  // playback time lives in a ref, NOT in state: a setState per animation frame re-rendered the whole
+  // panel 60x a second, which is what made editing the wall feel laggy. The clock writes straight to
+  // the canvas and to the two DOM nodes that show it.
+  const tRef = useRef(0)
+  const drawRef = useRef<(t: number) => void>(() => {})
+  const timeRef = useRef<HTMLSpanElement>(null)
+  const scrubRef = useRef<HTMLInputElement>(null)
   const [playing, setPlaying] = useState(true)
   const [thumbVersion, setVersion] = useState(0)
   const cfg = useMemo(() => withAnimation(rawCfg), [rawCfg])
@@ -114,110 +120,128 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
     }
   }, [cfg.videos])
 
+  const showTime = useCallback(
+    (t: number) => {
+      if (timeRef.current) timeRef.current.textContent = `${t.toFixed(1)} / ${cfg.durationSec.toFixed(1)} s`
+      if (scrubRef.current && document.activeElement !== scrubRef.current) scrubRef.current.value = String(t)
+    },
+    [cfg.durationSec],
+  )
+
   // playback clock
   useEffect(() => {
+    showTime(tRef.current)
     if (!playing) return
     let raf = 0
     let last = performance.now()
     const tick = (now: number) => {
-      const dt = (now - last) / 1000
+      const dt = Math.min(0.25, (now - last) / 1000) // a stalled tab must not jump the whole timeline
       last = now
-      setT((cur) => {
-        const next = cur + dt
-        return next >= cfg.durationSec ? 0 : next
-      })
+      const next = tRef.current + dt
+      tRef.current = next >= cfg.durationSec ? 0 : next
+      drawRef.current(tRef.current)
+      showTime(tRef.current)
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [playing, cfg.durationSec])
+  }, [playing, cfg.durationSec, showTime])
 
-  // draw
+  // build the draw function whenever the plan changes, and repaint once with it
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const scale = Math.min(1, 1280 / cfg.compW, 900 / cfg.compH)
-    const W = Math.round(cfg.compW * scale)
-    const H = Math.round(cfg.compH * scale)
-    if (canvas.width !== W) canvas.width = W
-    if (canvas.height !== H) canvas.height = H
-    const ctx = canvas.getContext('2d')!
-    ctx.clearRect(0, 0, W, H)
-    if (cfg.background === 'solid') {
-      ctx.fillStyle = /^#[0-9a-f]{6}$/i.test(cfg.bgColor) ? cfg.bgColor : '#0a0a0c'
-      ctx.fillRect(0, 0, W, H)
-    }
-    // the camera move scales/offsets the whole wall exactly like the null keyframes do in AE
-    const cam = cameraAt(t, camera, cfg.durationSec)
-    const cw = grid.cellW * scale * cam.k
-    const ch = grid.cellH * scale * cam.k
-    const gap = cfg.gap * scale * cam.k
-    const cx0 = W / 2 + cam.x * scale
-    const cy0 = H / 2 + cam.y * scale
-    const baseRadius = cfg.cornerRadius * scale * cam.k
-    const tone = tiles()
+    const draw = (t: number) => {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const scale = Math.min(1, 1280 / cfg.compW, 900 / cfg.compH)
+      const W = Math.round(cfg.compW * scale)
+      const H = Math.round(cfg.compH * scale)
+      if (canvas.width !== W) canvas.width = W
+      if (canvas.height !== H) canvas.height = H
+      const ctx = canvas.getContext('2d')!
+      ctx.clearRect(0, 0, W, H)
+      if (cfg.background === 'solid') {
+        ctx.fillStyle = /^#[0-9a-f]{6}$/i.test(cfg.bgColor) ? cfg.bgColor : '#0a0a0c'
+        ctx.fillRect(0, 0, W, H)
+      }
+      // the camera move scales/offsets the whole wall exactly like the null keyframes do in AE
+      const cam = cameraAt(t, camera, cfg.durationSec)
+      const cw = grid.cellW * scale * cam.k
+      const ch = grid.cellH * scale * cam.k
+      const gap = cfg.gap * scale * cam.k
+      const cx0 = W / 2 + cam.x * scale
+      const cy0 = H / 2 + cam.y * scale
+      const baseRadius = cfg.cornerRadius * scale * cam.k
+      const tone = tiles()
 
-    for (const s of screens) {
-      const st = screenStateAt(t, s, cfg)
-      const px = cx0 + (s.col - (grid.cols - 1) / 2) * (cw + gap)
-      const py = cy0 + (s.row - (grid.rows - 1) / 2) * (ch + gap)
-      const opacity = st.opacity
-      const sc = st.scale
-      if (opacity <= 0.01 || sc <= 0.01) continue
-      const w = cw * sc
-      const h = ch * sc
-      const radius = Math.min(baseRadius * sc, w / 2, h / 2)
-      ctx.save()
-      ctx.globalAlpha = Math.min(1, opacity)
-      rr(ctx, px - w / 2, py - h / 2, w, h, radius)
-      ctx.clip()
-      const isComp = s.v >= cfg.videos.length && s.v - cfg.videos.length < cfg.comps.length
-      const srcName = isComp ? (cfg.comps[s.v - cfg.videos.length]?.name ?? 'comp') : (cfg.videos[s.v] ?? String(s.v))
-      const thumb = isComp ? undefined : thumbs.get(cfg.videos[s.v] ?? '')
-      if (thumb && typeof thumb !== 'string') {
-        const sw = thumb.width
-        const sh = thumb.height
-        let dw = w
-        let dh = h
-        if (cfg.fill !== 'stretch') {
-          const k = cfg.fill === 'cover' ? Math.max(w / sw, h / sh) : Math.min(w / sw, h / sh)
-          dw = sw * k
-          dh = sh * k
-        }
-        ctx.drawImage(thumb, px - dw / 2, py - dh / 2, dw, dh)
-      } else {
-        ctx.fillStyle = tone[(s.row + s.col) % 2]
-        ctx.fillRect(px - w / 2, py - h / 2, w, h)
-        if (isComp && w >= 46 && h >= 24) {
-          ctx.fillStyle = 'rgba(255,255,255,.5)'
-          ctx.font = `${Math.max(8, Math.round(Math.min(h * 0.16, 13)))}px -apple-system, sans-serif`
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'middle'
-          ctx.fillText(srcName.slice(0, Math.floor(w / 7)), px, py)
-          ctx.textAlign = 'start'
-        }
-      }
-      ctx.restore()
-      // the centered screen gets a ring -- drawn OUTSIDE the clip and inset, or half the stroke
-      // disappears into the cell edge and the marker is invisible at preview scale
-      if (s.featured && w >= 20) {
-        const lw = Math.max(2, 3 * scale * cam.k)
+      for (const s of screens) {
+        const st = screenStateAt(t, s, cfg)
+        const px = cx0 + (s.col - (grid.cols - 1) / 2) * (cw + gap)
+        const py = cy0 + (s.row - (grid.rows - 1) / 2) * (ch + gap)
+        const opacity = st.opacity
+        const sc = st.scale
+        if (opacity <= 0.01 || sc <= 0.01) continue
+        const w = cw * sc
+        const h = ch * sc
+        const radius = Math.min(baseRadius * sc, w / 2, h / 2)
         ctx.save()
-        ctx.strokeStyle = 'rgba(255,255,255,.92)'
-        ctx.lineWidth = lw
-        ctx.shadowColor = 'rgba(0,0,0,.6)'
-        ctx.shadowBlur = 10 * scale * cam.k
-        rr(ctx, px - w / 2 + lw / 2, py - h / 2 + lw / 2, w - lw, h - lw, Math.max(0, radius - lw / 2))
-        ctx.stroke()
+        ctx.globalAlpha = Math.min(1, opacity)
+        rr(ctx, px - w / 2, py - h / 2, w, h, radius)
+        ctx.clip()
+        const isComp = s.v >= cfg.videos.length && s.v - cfg.videos.length < cfg.comps.length
+        const srcName = isComp ? (cfg.comps[s.v - cfg.videos.length]?.name ?? 'comp') : (cfg.videos[s.v] ?? String(s.v))
+        const thumb = isComp ? undefined : thumbs.get(cfg.videos[s.v] ?? '')
+        if (thumb && typeof thumb !== 'string') {
+          const sw = thumb.width
+          const sh = thumb.height
+          let dw = w
+          let dh = h
+          if (cfg.fill !== 'stretch') {
+            const k = cfg.fill === 'cover' ? Math.max(w / sw, h / sh) : Math.min(w / sw, h / sh)
+            dw = sw * k
+            dh = sh * k
+          }
+          ctx.drawImage(thumb, px - dw / 2, py - dh / 2, dw, dh)
+        } else {
+          ctx.fillStyle = tone[(s.row + s.col) % 2]
+          ctx.fillRect(px - w / 2, py - h / 2, w, h)
+          if (isComp && w >= 46 && h >= 24) {
+            ctx.fillStyle = 'rgba(255,255,255,.5)'
+            ctx.font = `${Math.max(8, Math.round(Math.min(h * 0.16, 13)))}px -apple-system, sans-serif`
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            ctx.fillText(srcName.slice(0, Math.floor(w / 7)), px, py)
+            ctx.textAlign = 'start'
+          }
+        }
         ctx.restore()
+        // the centered screen gets a ring -- drawn OUTSIDE the clip and inset, or half the stroke
+        // disappears into the cell edge and the marker is invisible at preview scale
+        if (s.featured && w >= 20) {
+          const lw = Math.max(2, 3 * scale * cam.k)
+          ctx.save()
+          ctx.strokeStyle = 'rgba(255,255,255,.92)'
+          ctx.lineWidth = lw
+          ctx.shadowColor = 'rgba(0,0,0,.6)'
+          ctx.shadowBlur = 10 * scale * cam.k
+          rr(ctx, px - w / 2 + lw / 2, py - h / 2 + lw / 2, w - lw, h - lw, Math.max(0, radius - lw / 2))
+          ctx.stroke()
+          ctx.restore()
+        }
       }
     }
-  }, [cfg, grid, screens, camera, t, thumbVersion])
+    drawRef.current = draw
+    draw(tRef.current)
+  }, [cfg, grid, screens, camera, thumbVersion])
 
   const pending = isCEP() ? cfg.videos.slice(0, 200).filter((p) => !thumbs.has(p) || thumbs.get(p) === 'loading').length : 0
 
+  const seek = (t: number) => {
+    tRef.current = t
+    drawRef.current(t)
+    showTime(t)
+  }
   const replay = () => {
-    setT(0)
+    seek(0)
     setPlaying(true)
   }
 
@@ -281,10 +305,18 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
             <path d="M2 1v3h3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        <input type="range" className="timeline" min={0} max={cfg.durationSec} step={1 / cfg.fps} value={Math.min(t, cfg.durationSec)} aria-label="Preview time" onChange={(e) => setT(parseFloat(e.target.value))} />
-        <span className="time">
-          {t.toFixed(1)} / {cfg.durationSec.toFixed(1)} s
-        </span>
+        <input
+          ref={scrubRef}
+          type="range"
+          className="timeline"
+          min={0}
+          max={cfg.durationSec}
+          step={1 / cfg.fps}
+          defaultValue={0}
+          aria-label="Preview time"
+          onChange={(e) => seek(parseFloat(e.target.value))}
+        />
+        <span className="time" ref={timeRef} />
       </div>
     </>
   )

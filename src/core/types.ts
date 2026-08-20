@@ -4,9 +4,9 @@ export type GridMode = 'auto' | 'manual'
 export type FillMode = 'cover' | 'contain' | 'stretch'
 export type Assign = 'sequential' | 'shuffle' | 'random'
 export type Background = 'solid' | 'transparent'
-export type RevealMode = 'none' | 'random' | 'rows' | 'cols' | 'sequence' | 'center' | 'edges' | 'diagonal'
+export type RevealMode = 'none' | 'random' | 'rows' | 'cols' | 'sequence' | 'snake' | 'center' | 'edges' | 'spiral' | 'diagonal'
 export type CellAspect = 'fill' | 'wide' | 'tv' | 'square' | 'tall' | 'custom'
-export type ScreenAnim = 'cut' | 'fade' | 'pop'
+export type ScreenAnim = 'cut' | 'fade' | 'flicker' | 'pop'
 
 export interface CompRef {
   /** AE project item id — stable within a project */

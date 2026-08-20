@@ -66,3 +66,45 @@ export function gridFor(cfg: Config): GridSpec {
     wallH: cell.cellH * rows + cfg.gap * (rows - 1),
   }
 }
+
+/** Comp left over around the wall, px per side. 0 = the wall reaches the comp edges. */
+export function bandsFor(cfg: Config, grid?: GridSpec): { x: number; y: number } {
+  const g = grid ?? gridFor(cfg)
+  return {
+    x: Math.max(0, Math.round((cfg.compW - 2 * cfg.margin - g.wallW) / 2)),
+    y: Math.max(0, Math.round((cfg.compH - 2 * cfg.margin - g.wallH) / 2)),
+  }
+}
+
+/**
+ * Rows × columns that make the wall fill the comp EXACTLY, with cells as close as possible to the
+ * shape you asked for and to the number of screens you already have.
+ *
+ * A locked cell shape can only reach the comp edges when rows/cols happen to match the comp's
+ * aspect; otherwise AE gets letterbox bands. This finds the counts where stretching cells to fill
+ * costs almost nothing, so "flush edges" and "cells the right shape" stop fighting each other.
+ */
+export function fillGrid(cfg: Config): { gridMode: 'manual'; rows: number; cols: number; cellAspect: 'fill' } {
+  const availW = Math.max(1, cfg.compW - 2 * cfg.margin)
+  const availH = Math.max(1, cfg.compH - 2 * cfg.margin)
+  const g = gridFor(cfg)
+  const target = aspectOf(cfg) ?? g.cellW / g.cellH
+  const want = Math.max(1, cfg.gridMode === 'manual' ? cfg.rows * cfg.cols : cfg.videos.length + cfg.comps.length || g.rows * g.cols)
+  let best = { rows: g.rows, cols: g.cols }
+  let bestScore = Infinity
+  for (let rows = 1; rows <= 64; rows++) {
+    const ch = (availH - (rows - 1) * cfg.gap) / rows
+    if (ch <= 2) break
+    for (let cols = 1; cols <= 64; cols++) {
+      const cw = (availW - (cols - 1) * cfg.gap) / cols
+      if (cw <= 2) break
+      // how wrong the cell shape is, plus a gentle pull towards the screen count you already have
+      const score = Math.abs(Math.log(cw / ch / target)) + 0.12 * Math.abs(Math.log((rows * cols) / want))
+      if (score < bestScore) {
+        bestScore = score
+        best = { rows, cols }
+      }
+    }
+  }
+  return { gridMode: 'manual', rows: best.rows, cols: best.cols, cellAspect: 'fill' }
+}

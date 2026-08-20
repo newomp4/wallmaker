@@ -4,7 +4,7 @@
  * Touching rows/columns while the grid is automatic switches it to manual from the current layout.
  */
 import type { Config, CellAspect } from '../core/types'
-import { gridFor } from '../core/grid'
+import { gridFor, bandsFor, fillGrid } from '../core/grid'
 import { Stepper } from './controls'
 
 const ASPECTS: { value: CellAspect; label: string }[] = [
@@ -18,6 +18,7 @@ const ASPECTS: { value: CellAspect; label: string }[] = [
 
 export function QuickBar({ cfg, patch }: { cfg: Config; patch: (p: Partial<Config>) => void }) {
   const grid = gridFor(cfg)
+  const bands = bandsFor(cfg, grid)
   const toManual = (p: Partial<Config>) => patch({ gridMode: 'manual', rows: grid.rows, cols: grid.cols, ...p })
   return (
     <div className="quickbar">
@@ -44,6 +45,11 @@ export function QuickBar({ cfg, patch }: { cfg: Config; patch: (p: Partial<Confi
       </label>
       {cfg.cellAspect === 'custom' && (
         <Stepper label="w:h" value={Math.round(cfg.cellAspectCustom * 100) / 100} min={0.1} max={10} step={0.05} onChange={(v) => patch({ cellAspectCustom: v })} />
+      )}
+      {(bands.x > 1 || bands.y > 1) && (
+        <button type="button" className="qb-chip" title="Pick the rows and columns that reach the comp edges with cells this shape" onClick={() => patch(fillGrid(cfg))}>
+          Fill comp
+        </button>
       )}
       <button type="button" className="qb-chip" title="Reroll the seed — new random order, dead screens and start offsets" onClick={() => patch({ seed: Math.floor(Math.random() * 100000) })}>
         <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden>

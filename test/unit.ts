@@ -4,7 +4,7 @@
  */
 import { DEFAULT_CONFIG } from '../src/core/defaults.ts'
 import type { Config } from '../src/core/types.ts'
-import { gridFor, autoGrid, aspectOf } from '../src/core/grid.ts'
+import { gridFor, autoGrid, aspectOf, bandsFor, fillGrid } from '../src/core/grid.ts'
 import { planScreens, planCamera, cameraAt, zoomAt, screenStateAt, withAnimation, centerCell } from '../src/core/reveal.ts'
 import { compileWall, buildKeyFor } from '../src/core/scene.ts'
 
@@ -35,6 +35,51 @@ const cfg = (p: Partial<Config>): Config => ({ ...DEFAULT_CONFIG, videos: Array.
   check('auto grid covers all sources', auto.rows * auto.cols >= 12)
   const one = gridFor(cfg({ videos: ['/v/a.mp4'], gridMode: 'auto' }))
   check('1-source grid is 1x1', one.rows === 1 && one.cols === 1)
+}
+
+// ---- filling the comp edge to edge ----
+{
+  const locked = cfg({ gridMode: 'manual', rows: 5, cols: 5, cellAspect: 'wide', gap: 8, margin: 0, compW: 1920, compH: 1080 })
+  const b = bandsFor(locked)
+  check('locked cells leave letterbox bands', b.x > 1 || b.y > 1, JSON.stringify(b))
+  const filled = { ...locked, ...fillGrid(locked) }
+  const b2 = bandsFor(filled)
+  check('fillGrid reaches the comp edges', b2.x <= 1 && b2.y <= 1, JSON.stringify(b2))
+  const g2 = gridFor(filled)
+  check('fillGrid keeps cells near the shape asked for', Math.abs(g2.cellW / g2.cellH / (16 / 9) - 1) < 0.14, `${(g2.cellW / g2.cellH).toFixed(3)}`)
+  check('fillGrid stays near the screen count asked for', Math.abs(g2.rows * g2.cols - 25) <= 12, `${g2.rows}x${g2.cols}`)
+  const already = cfg({ gridMode: 'manual', rows: 3, cols: 4, cellAspect: 'fill' })
+  const b3 = bandsFor(already)
+  check('stretched cells always fill the comp', b3.x <= 1 && b3.y <= 1)
+}
+
+// ---- reveal patterns ----
+{
+  const base = { animate: true, gridMode: 'manual' as const, rows: 5, cols: 5, jitter: 0 }
+  for (const mode of ['random', 'rows', 'cols', 'sequence', 'snake', 'center', 'spiral', 'edges', 'diagonal'] as const) {
+    const s = planScreens(cfg({ ...base, reveal: mode }))
+    const ths = s.map((x) => x.th)
+    check(`${mode}: every screen gets a distinct threshold`, new Set(ths).size === ths.length && Math.min(...ths) > 0 && Math.max(...ths) < 100)
+  }
+  const spiral = planScreens(cfg({ ...base, reveal: 'spiral' }))
+  const first = spiral.slice().sort((a, b) => a.th - b.th)[0]
+  check('spiral starts at the middle', Math.abs(first.row - 2) <= 1 && Math.abs(first.col - 2) <= 1, `${first.row},${first.col}`)
+  const snake = planScreens(cfg({ ...base, reveal: 'snake' }))
+  const byTh = snake.slice().sort((a, b) => a.th - b.th)
+  check('snake runs row 0 left→right then row 1 right→left', byTh[0].row === 0 && byTh[0].col === 0 && byTh[4].col === 4 && byTh[5].row === 1 && byTh[5].col === 4)
+}
+
+// ---- duplicates when there are fewer sources than screens ----
+{
+  const c = cfg({ videos: ['/v/a.mp4', '/v/b.mp4', '/v/c.mp4'], gridMode: 'manual', rows: 4, cols: 5, assign: 'shuffle', featured: -1 })
+  const s = planScreens(c)
+  check('every cell gets a source', s.length === 20 && s.every((x) => x.v >= 0 && x.v < 3))
+  const counts = [0, 0, 0]
+  for (const x of s) counts[x.v]++
+  check('shuffle spreads the duplicates evenly', Math.max(...counts) - Math.min(...counts) <= 1, counts.join('/'))
+  check('duplicates are scattered, not in blocks', s.slice(0, 5).map((x) => x.v).join('') !== '01201')
+  const offs = new Set(s.filter((x) => x.v === 0).map((x) => x.offset))
+  check('same-source screens all start at different points', offs.size === counts[0])
 }
 
 // ---- thresholds & the centered screen ----

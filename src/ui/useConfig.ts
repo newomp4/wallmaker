@@ -2,7 +2,25 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Config } from '../core/types'
 import { DEFAULT_CONFIG } from '../core/defaults'
 
-const KEY = 'wallmaker.config.v2'
+const KEY = 'wallmaker.config.v3'
+const KEY_V2 = 'wallmaker.config.v2'
+
+/** Load the saved panel state, carrying a v2 save forward (sources and layout kept). */
+function load(): Config {
+  try {
+    const raw = localStorage.getItem(KEY)
+    if (raw) return sanitize(JSON.parse(raw))
+    const old = localStorage.getItem(KEY_V2)
+    if (old) {
+      const c = sanitize(JSON.parse(old))
+      // sequential placement is what made a wall look like a file listing -- start people on shuffled
+      return { ...c, assign: c.assign === 'sequential' ? 'shuffle' : c.assign }
+    }
+  } catch {
+    /* corrupt save */
+  }
+  return { ...DEFAULT_CONFIG }
+}
 
 /** union-typed fields and their allowed values — anything else a stale save carries is dropped */
 const ENUMS: Partial<Record<keyof Config, readonly string[]>> = {
@@ -10,8 +28,8 @@ const ENUMS: Partial<Record<keyof Config, readonly string[]>> = {
   fill: ['cover', 'contain', 'stretch'],
   assign: ['sequential', 'shuffle', 'random'],
   background: ['solid', 'transparent'],
-  reveal: ['none', 'random', 'rows', 'cols', 'sequence', 'center', 'edges', 'diagonal'],
-  screenAnim: ['cut', 'fade', 'pop'],
+  reveal: ['none', 'random', 'rows', 'cols', 'sequence', 'snake', 'center', 'spiral', 'edges', 'diagonal'],
+  screenAnim: ['cut', 'fade', 'flicker', 'pop'],
   cellAspect: ['fill', 'wide', 'tv', 'square', 'tall', 'custom'],
   intro: ['none', 'zoomOut'],
   outro: ['none', 'zoomIn'],
@@ -45,14 +63,7 @@ export function sanitize(raw: unknown): Config {
 }
 
 export function useConfig() {
-  const [cfg, setCfg] = useState<Config>(() => {
-    try {
-      const raw = localStorage.getItem(KEY)
-      return raw ? sanitize(JSON.parse(raw)) : { ...DEFAULT_CONFIG }
-    } catch {
-      return { ...DEFAULT_CONFIG }
-    }
-  })
+  const [cfg, setCfg] = useState<Config>(load)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const save = useRef(cfg)
   useEffect(() => {

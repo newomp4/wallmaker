@@ -18,6 +18,16 @@ function orderValue(mode: Config['reveal'], row: number, col: number, rows: numb
     case 'rows': return row / Math.max(1, rows - 1 || 1) + tie
     case 'cols': return col / Math.max(1, cols - 1 || 1) + tie
     case 'sequence': return (row * cols + col) / n
+    case 'snake': return (row * cols + (row % 2 === 1 ? cols - 1 - col : col)) / n
+    case 'spiral': {
+      // square rings out from the middle, walking round each ring: 'center' but with a direction
+      const dr = row - (rows - 1) / 2
+      const dc = col - (cols - 1) / 2
+      const ring = Math.max(Math.abs(dr), Math.abs(dc))
+      const maxRing = Math.max(0.5, Math.max((rows - 1) / 2, (cols - 1) / 2))
+      const ang = (Math.atan2(dr, dc) + Math.PI) / (2 * Math.PI) // 0..1 round the ring
+      return (ring + ang) / (maxRing + 1)
+    }
     case 'center': {
       const dx = (col - (cols - 1) / 2) / Math.max(1, cols / 2)
       const dy = (row - (rows - 1) / 2) / Math.max(1, rows / 2)
@@ -73,9 +83,12 @@ export function planScreens(cfg: Config, grid?: GridSpec): ScreenSpec[] {
   const np = pool.length
   let vids: number[]
   if (cfg.assign === 'shuffle') {
+    // whole rounds of the pool, then a RANDOM pick of sources for the cells left over -- so the
+    // duplicates that fill a grid bigger than the source list aren't always the first few files
     const rep: number[] = []
-    while (rep.length < n) for (let v = 0; v < np && rep.length < n; v++) rep.push(pool[v])
-    vids = shuffled(rep, rngAssign)
+    while (rep.length + np <= n) for (let v = 0; v < np; v++) rep.push(pool[v])
+    const extra = shuffled(pool.slice(), rngAssign).slice(0, n - rep.length)
+    vids = shuffled(rep.concat(extra), rngAssign)
   } else if (cfg.assign === 'random') {
     vids = Array.from({ length: n }, () => pool[Math.floor(rngAssign() * np)])
   } else {
@@ -215,6 +228,13 @@ export function screenStateAt(t: number, s: ScreenSpec, cfg: Config): ScreenStat
   const p = Math.min(1, dt / dur)
   switch (cfg.screenAnim) {
     case 'fade': return { opacity: p, scale: 1 }
+    case 'flicker': {
+      // a tube warming up: on/off per frame, settling as p approaches 1 (mirrors the AE expression)
+      if (p >= 1) return { opacity: 1, scale: 1 }
+      const frame = Math.floor(dt * cfg.fps)
+      const on = hash01(s.i * 971 + frame * 7919) < 0.25 + 0.75 * p * p
+      return { opacity: on ? 0.55 + 0.45 * hash01(s.i * 131 + frame * 37) : 0, scale: 1 }
+    }
     case 'pop': {
       const c1 = 1.70158
       const c3 = c1 + 1
@@ -223,4 +243,13 @@ export function screenStateAt(t: number, s: ScreenSpec, cfg: Config): ScreenStat
     }
     default: return { opacity: 1, scale: 1 }
   }
+}
+
+/** Deterministic 0..1 from an integer — the preview's stand-in for AE's seedRandom(n, true). */
+function hash01(x: number): number {
+  let h = x | 0
+  h = Math.imul(h ^ (h >>> 16), 2246822507)
+  h = Math.imul(h ^ (h >>> 13), 3266489909)
+  h ^= h >>> 16
+  return (h >>> 0) / 4294967296
 }

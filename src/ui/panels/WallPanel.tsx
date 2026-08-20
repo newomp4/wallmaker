@@ -1,7 +1,7 @@
 import type { Config, CellAspect } from '../../core/types'
 import { COMP_PRESETS } from '../../core/defaults'
 import { PRESETS } from '../../core/presets'
-import { gridFor } from '../../core/grid'
+import { gridFor, bandsFor, fillGrid } from '../../core/grid'
 import { ColorInput, Field, NumberInput, Row, Section, Segmented, Select, Slider, TextInput, Toggle } from '../controls'
 
 /** Does a preset describe the layout the config is already in? (so the chip can show as active) */
@@ -11,6 +11,8 @@ function isActive(cfg: Config, patch: Partial<Config>): boolean {
 
 export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Config>) => void }) {
   const grid = gridFor(cfg)
+  const bands = bandsFor(cfg, grid)
+  const flush = bands.x <= 1 && bands.y <= 1
   return (
     <>
       <Section title="Arrangement">
@@ -52,6 +54,18 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
           />
         </Field>
         {cfg.cellAspect === 'custom' && <NumberInput label="Width ÷ height" value={cfg.cellAspectCustom} min={0.1} max={10} step={0.01} onChange={(v) => patch({ cellAspectCustom: v })} />}
+        <div className="notice">
+          <span>
+            {flush
+              ? `Flush · cells ${(grid.cellW / grid.cellH).toFixed(2)}:1`
+              : `${bands.y > 1 ? `${bands.y} px top & bottom` : ''}${bands.x > 1 && bands.y > 1 ? ' · ' : ''}${bands.x > 1 ? `${bands.x} px left & right` : ''}`}
+          </span>
+          {!flush && (
+            <button type="button" className="btn" title="Pick the rows and columns that reach the comp edges with cells this shape" onClick={() => patch(fillGrid(cfg))}>
+              Fill comp
+            </button>
+          )}
+        </div>
         <Slider label="Gap" value={cfg.gap} min={0} max={80} onChange={(v) => patch({ gap: v })} format={(v) => `${v} px`} />
         <Slider label="Margin" value={cfg.margin} min={0} max={400} onChange={(v) => patch({ margin: v })} format={(v) => `${v} px`} />
         <Slider label="Corners" value={cfg.cornerRadius} min={0} max={60} onChange={(v) => patch({ cornerRadius: v })} format={(v) => (v === 0 ? 'square' : `${v} px`)} />
