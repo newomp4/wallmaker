@@ -141,7 +141,9 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
 export function Stepper({ label, value, min, max, step = 1, onChange, format }: { label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; format?: (v: number) => string }) {
   const [text, setText] = useState<string | null>(null)
   const clamp = (v: number) => Math.min(max, Math.max(min, v))
-  const nudge = (d: number) => onChange(clamp(Math.round((value + d * step) / step) * step))
+  // snap to the step grid without floating-point dust (0.05 steps must not show 1.8300000000000003)
+  const snap = (v: number) => parseFloat((Math.round(v / step) * step).toFixed(6))
+  const nudge = (d: number) => onChange(clamp(snap(value + d * step)))
   return (
     <div className="stepper" role="group" aria-label={label}>
       <span className="st-lbl">{label}</span>

@@ -1,3 +1,9 @@
+#!/usr/bin/env node
+/**
+ * Dev utility: screenshot the live panel over the CEF debug port (8724).
+ *   node test/screenshot-panel.mjs /tmp/panel ['{"gap":10,...}']
+ * Reloads the panel, optionally patches the config through window.__wallmaker, saves <prefix>.png.
+ */
 import { writeFileSync } from 'node:fs'
 import WebSocket from 'ws'
 const outPrefix = process.argv[2] ?? '/tmp/panel'
