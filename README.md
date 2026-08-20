@@ -13,10 +13,16 @@ Point it at a folder of videos (or select comps right in your project), choose t
 
 **The wall**
 - Any grid: automatic rows × columns from your source count, or set them yourself — 2×2 to 1000+ screens, perfectly aligned and spaced (gap, margin, rounded corners).
+- **Cell shape lock**: keep every screen 16:9 / 4:3 / 1:1 / 9:16 / custom — the wall centers itself instead of stretching; or fill the comp edge-to-edge.
 - **Big screens**: hero monitors spanning 2×2 cells, placed by the seed.
 - Video fit per screen: Fill (crop), Fit (letterbox) or Stretch — mixed sizes and aspect ratios welcome.
 - Looks: background panel, CCTV **static noise** where screens are off, per-cell **borders**, CRT **scanlines**, `CAM 01` labels — or fully transparent for compositing.
 - **Look presets** (top bar): CCTV wall, Clean mosaic, Hero mosaic, Retro CRT, Gallery fade.
+- A **quick bar** under the live preview holds the tune-while-you-watch controls (grid, gap, cell shape, seed) so tweaking never means scrolling.
+
+**Featured screen & camera**
+- **Featured screen**: pin one source — a file or a comp from your project — to the center of the wall. Always on, plays from its start, kept out of the general rotation, optionally 2×2.
+- **Camera**: start zoomed onto that screen so it fills the frame, hold, then **pull back to reveal the wall** around it — and/or **push back into it at the end**. Baked as eased, editable keyframes on the Controls null; the preview plays the exact move. The classic "zoom out from my video into a wall of videos" is two clicks.
 
 **The power-on** *(off by default — the base wall is simply on)*
 - Turn on **Animate the power-on** and screens come alive one by one: random, row by row, column by column, scanline, center-out, edges-in, or diagonally — with adjustable randomness, a start time, and one number for how long until **all** screens are on.
@@ -47,10 +53,12 @@ Then (re)start After Effects (2024 or newer) → **Window ▸ Extensions ▸ Wal
 ## Use
 
 1. **Videos** — add a folder, files, or your Project-panel selection (footage *and* comps).
-2. **Wall** — comp size / fps / duration, the grid, big screens, fit.
+2. **Wall** — comp size / fps / duration, the grid, cell shape, big screens, the featured screen and the camera move.
 3. **Look** — background, borders, scanlines, labels, the Focus spotlight.
 4. **Power-on** — flip the toggle, pick an order and timing, press ▶ in the preview.
 5. **Build** — one click; the comp opens when done.
+
+> Power-on animation is **off by default** — the base wall is simply on. Everything animated is opt-in.
 
 ## Development
 

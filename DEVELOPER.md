@@ -22,7 +22,7 @@ expressions mirror `screenStateAt()`. Change one side and you change both — th
 | `src/ae/cep.ts` | CEP bridge: evalScript, file IO, folder listing (no-op outside AE) |
 | `src/ae/build.ts` | begin → step… → finish batching (evalScript blocks the panel thread; small batches keep it responsive) |
 | `cep/host/index.jsx` | ★ ES3 host: imports footage, builds screens/masks/labels, writes the expressions |
-| `test/run-host.mjs` | rounds A, B, D: build via AppleScript `DoScript` into the running AE, then verify |
+| `test/run-host.mjs` | rounds A, B, D, F: build via AppleScript `DoScript` into the running AE, then verify |
 | `test/run-rebuild.mjs` | round E: build → user customizes → rebuild in place → remove; asserts nothing is lost or duplicated |
 | `test/run-panel.mjs` | round C: drives the real panel over the CEF debug port (8724) |
 | `test/verify.py` | asserts probes (post-expression opacity per screen) and snapshot pixels vs the plan — including a model check of the Focus falloff |
@@ -62,6 +62,10 @@ npm run test:panel    # round C — needs the panel installed & open (npm run ce
 
 Round D covers the feature set (hero 2×2 screens, borders, scanlines, Focus falloff vs the math
 model, and a comp as a source — the runner creates a solid-color comp and swaps it into the plan).
+Round F covers aspect-locked cells + the featured screen + the camera: `ctlState` returns the
+Controls null's evaluated Scale/Position per time, and the verifier checks zoomed frames are
+literally the featured source's pixels corner-to-corner, neutral frames match the cell grid, and
+the letterbox band above an aspect-locked wall is background.
 
 Verification is two-layered: `probe` returns every screen's **post-expression opacity** at a time
 (asserted exactly against the plan), and `snapshot` (saveFrameToPng) frames are checked
