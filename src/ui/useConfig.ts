@@ -12,6 +12,9 @@ const ENUMS: Partial<Record<keyof Config, readonly string[]>> = {
   background: ['dark', 'static', 'transparent'],
   reveal: ['none', 'random', 'rows', 'cols', 'scanline', 'center', 'edges', 'diagonal'],
   screenAnim: ['cut', 'fade', 'flicker', 'pop'],
+  cellAspect: ['fill', 'wide', 'tv', 'square', 'tall', 'custom'],
+  intro: ['none', 'zoomOut'],
+  outro: ['none', 'zoomIn'],
 }
 
 /** Strict whitelist over DEFAULT_CONFIG: correct types only, enum fields checked, unknown keys dropped. */

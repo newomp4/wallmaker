@@ -719,6 +719,84 @@ $.global.WALLMAKER = (function () {
     st.scanLayer = l;
   }
 
+  /**
+   * The intro/outro camera move: eased Scale + Position keyframes on the Controls null so the
+   * comp starts (and/or ends) filled by one screen. The camera OWNS those two properties while
+   * it is on -- a ' cam' marker in the null's comment tells a later rebuild the keys are ours,
+   * so switching the camera off cleans them up without ever touching hand-made keyframes.
+   */
+  function applyCamera(ctl) {
+    var d = st.data;
+    var cam = d.camera;
+    var sp = tf(ctl).property('ADBE Scale');
+    var pp = tf(ctl).property('ADBE Position');
+    var ownedBefore = ctl.comment.indexOf(' cam') >= 0;
+    if (!cam) {
+      if (ownedBefore) {
+        try {
+          while (sp.numKeys > 0) sp.removeKey(1);
+          while (pp.numKeys > 0) pp.removeKey(1);
+          sp.setValue([100, 100]);
+          tf(ctl).property('ADBE Position').setValue([d.frame.w / 2, d.frame.h / 2]);
+        } catch (e0) {}
+        ctl.comment = ctl.comment.replace(' cam', '');
+      }
+      return;
+    }
+    try {
+      while (sp.numKeys > 0) sp.removeKey(1);
+      while (pp.numKeys > 0) pp.removeKey(1);
+      var W = d.frame.w;
+      var H = d.frame.h;
+      var k = cam.scale;
+      var zoomP = [W / 2 - (k / 100) * cam.p[0], H / 2 - (k / 100) * cam.p[1]];
+      var homeS = [100, 100];
+      var homeP = [W / 2, H / 2];
+      var zoomS = [k, k];
+      var D = d.durationSec;
+      var keys = [];
+      var introEnd = 0;
+      if (cam.intro) {
+        var h1 = Math.min(cam.intro.hold, Math.max(0, D - 0.2));
+        var e1 = Math.min(h1 + cam.intro.dur, D);
+        if (h1 > 0) keys.push({ t: 0, s: zoomS, p: zoomP });
+        keys.push({ t: h1, s: zoomS, p: zoomP });
+        keys.push({ t: e1, s: homeS, p: homeP });
+        introEnd = e1;
+      }
+      if (cam.outro) {
+        var tEnd = Math.max(introEnd + 0.2, D - cam.outro.hold);
+        var tStart = Math.max(introEnd + 0.1, tEnd - cam.outro.dur);
+        if (tStart < D) {
+          keys.push({ t: tStart, s: homeS, p: homeP });
+          keys.push({ t: Math.min(tEnd, D), s: zoomS, p: zoomP });
+        }
+      }
+      var ease = new KeyframeEase(0, 75);
+      for (var i = 0; i < keys.length; i++) {
+        var ki = keys[i];
+        var siN = sp.addKey(ki.t);
+        sp.setValueAtKey(siN, ki.s);
+        var piN = pp.addKey(ki.t);
+        pp.setValueAtKey(piN, ki.p);
+      }
+      for (var j = 1; j <= sp.numKeys; j++) {
+        try {
+          sp.setTemporalEaseAtKey(j, [ease, ease], [ease, ease]);
+        } catch (eE1) {}
+      }
+      for (var m = 1; m <= pp.numKeys; m++) {
+        try {
+          pp.setTemporalEaseAtKey(m, [ease], [ease]);
+        } catch (eE2) {}
+        try {
+          pp.setSpatialTangentsAtKey(m, [0, 0], [0, 0]);
+        } catch (eE3) {}
+      }
+      if (!ownedBefore) ctl.comment = ctl.comment + ' cam';
+    } catch (eCam) {}
+  }
+
   // ---------------------------------------------------------------- build flow
 
   function findRoot(buildKey) {
@@ -809,6 +887,7 @@ $.global.WALLMAKER = (function () {
       main.bgColor = [data.bg.color[0], data.bg.color[1], data.bg.color[2]];
       st.main = main;
       st.ctl = ensureControls(main);
+      applyCamera(st.ctl);
       st.focusNull = ensureFocusNull(main);
       buildBackground();
       buildBorders();
@@ -971,5 +1050,24 @@ $.global.WALLMAKER = (function () {
     return reply(out);
   }
 
-  return { info: info, begin: begin, step: step, finish: finish, remove: removeBuild, selectedSources: selectedSources, snapshot: snapshot, probe: probe, version: VERSION };
+  /** Evaluated Scale/Position of the Controls null at a time (camera verification). */
+  function ctlState(json) {
+    var a = args(json);
+    var comp = findCompByName(String(a.compName));
+    if (!comp) throw new Error('Comp not found: ' + a.compName);
+    var ctl = null;
+    for (var i = 1; i <= comp.numLayers; i++) {
+      var l = comp.layer(i);
+      if (isOurs(l) && l.comment.indexOf(TAG + '-controls') === 0) ctl = l;
+    }
+    if (!ctl) throw new Error('Controls null not found');
+    var t = num(a.time, 0);
+    return reply({
+      scale: tf(ctl).property('ADBE Scale').valueAtTime(t, false),
+      pos: tf(ctl).property('ADBE Position').valueAtTime(t, false),
+      keys: tf(ctl).property('ADBE Scale').numKeys
+    });
+  }
+
+  return { info: info, begin: begin, step: step, finish: finish, remove: removeBuild, selectedSources: selectedSources, snapshot: snapshot, probe: probe, ctlState: ctlState, version: VERSION };
 })();

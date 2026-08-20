@@ -1,4 +1,4 @@
-import type { Config } from '../../core/types'
+import type { Config, CellAspect } from '../../core/types'
 import { COMP_PRESETS } from '../../core/defaults'
 import { gridFor } from '../../core/grid'
 import { Field, NumberInput, Row, Section, Segmented, Select, Slider, TextInput, Toggle } from '../controls'
@@ -44,9 +44,56 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
             <NumberInput label="Columns" value={cfg.cols} min={1} max={64} onChange={(v) => patch({ cols: Math.round(v) })} />
           </Row>
         )}
+        <Field label="Cell shape" hint="Lock every screen to an aspect ratio — the wall stays centered; 'Fill comp' stretches cells to cover the comp exactly.">
+          <Segmented
+            value={cfg.cellAspect}
+            options={[
+              { value: 'fill', label: 'Fill comp' },
+              { value: 'wide', label: '16:9' },
+              { value: 'tv', label: '4:3' },
+              { value: 'square', label: '1:1' },
+              { value: 'tall', label: '9:16' },
+              { value: 'custom', label: 'Custom' },
+            ]}
+            onChange={(v: CellAspect) => patch({ cellAspect: v })}
+          />
+        </Field>
+        {cfg.cellAspect === 'custom' && <NumberInput label="Cell aspect (width ÷ height)" value={cfg.cellAspectCustom} min={0.1} max={10} step={0.01} onChange={(v) => patch({ cellAspectCustom: v })} />}
         <Slider label="Gap between screens" value={cfg.gap} min={0} max={80} onChange={(v) => patch({ gap: v })} format={(v) => `${v} px`} hint="Also a live 'Gap (px)' slider on the Controls null in AE — keyframe it and the screens fly apart." />
         <Slider label="Outer margin" value={cfg.margin} min={0} max={400} onChange={(v) => patch({ margin: v })} format={(v) => `${v} px`} />
         <Slider label="Big screens (2×2)" value={cfg.heroes} min={0} max={8} onChange={(v) => patch({ heroes: v })} format={(v) => (v === 0 ? 'none' : String(v))} hint="Hero monitors that span 2×2 cells — placed by the seed." />
+      </Section>
+      <Section title="Featured screen" hint="Pin one source to the center of the wall — always on, playing from its start. Perfect for 'my video, surrounded by the wall'.">
+        <Select
+          label="Source"
+          value={String(cfg.featured)}
+          options={[
+            { value: '-1', label: 'None' },
+            ...cfg.videos.map((v, i) => ({ value: String(i), label: v.slice(v.lastIndexOf('/') + 1) })),
+            ...cfg.comps.map((c, i) => ({ value: String(cfg.videos.length + i), label: `${c.name} (comp)` })),
+          ]}
+          onChange={(v) => patch({ featured: parseInt(v, 10) })}
+        />
+        {cfg.featured >= 0 && <Toggle label="Featured screen is big (2×2 cells)" value={cfg.featuredSpan === 2} onChange={(v) => patch({ featuredSpan: v ? 2 : 1 })} />}
+      </Section>
+      <Section title="Camera" hint="Keyframed on the Controls null (open its Scale/Position to retime or re-ease). Targets the featured screen, or the centermost one.">
+        <Toggle label="Start on one screen, pull back to reveal the wall" value={cfg.intro === 'zoomOut'} onChange={(v) => patch({ intro: v ? 'zoomOut' : 'none' })} />
+        {cfg.intro === 'zoomOut' && (
+          <Row>
+            <NumberInput label="Hold (s)" value={cfg.introHold} min={0} max={60} step={0.1} onChange={(v) => patch({ introHold: v })} />
+            <NumberInput label="Pull-back (s)" value={cfg.introDur} min={0.1} max={60} step={0.1} onChange={(v) => patch({ introDur: v })} />
+          </Row>
+        )}
+        <Toggle label="Push back into that screen at the end" value={cfg.outro === 'zoomIn'} onChange={(v) => patch({ outro: v ? 'zoomIn' : 'none' })} />
+        {cfg.outro === 'zoomIn' && (
+          <Row>
+            <NumberInput label="Push-in (s)" value={cfg.outroDur} min={0.1} max={60} step={0.1} onChange={(v) => patch({ outroDur: v })} />
+            <NumberInput label="End hold (s)" value={cfg.outroHold} min={0} max={60} step={0.1} onChange={(v) => patch({ outroHold: v })} />
+          </Row>
+        )}
+        {(cfg.intro === 'zoomOut' || cfg.outro === 'zoomIn') && cfg.animate && cfg.intro === 'zoomOut' && cfg.revealStart < cfg.introHold && (
+          <p className="hint">Tip: the power-on starts at {cfg.revealStart}s, while the camera is still zoomed in until {cfg.introHold.toFixed(1)}s — set “Starts at” ≈ {cfg.introHold.toFixed(1)}s on the Power-on tab so the wall comes alive as it's revealed.</p>
+        )}
       </Section>
       <Section title="Screens">
         <Field label="Video fit">

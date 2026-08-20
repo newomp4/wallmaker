@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Config } from '../core/types'
 import { PRESETS } from '../core/presets'
 import { useConfig } from './useConfig'
@@ -9,6 +9,7 @@ import { LookPanel } from './panels/LookPanel'
 import { RevealPanel } from './panels/RevealPanel'
 import { BuildPanel } from './panels/BuildPanel'
 import { isCEP, callHost } from '../ae/cep'
+import { useSources } from './useSources'
 import { compileWall, buildKeyFor } from '../core/scene'
 import { buildInAE, defaultBuildFolder, hostInfoAE } from '../ae/build'
 
@@ -26,6 +27,8 @@ export default function App() {
   // two-step reset: blocking dialogs (confirm/alert) are unreliable inside CEP panels
   const [armReset, setArmReset] = useState(false)
   const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+  const sourcesApi = useSources(cfg, patch)
 
   // debug hooks: lets the automated tests (and the curious) drive the panel from the CEF debug port
   useEffect(() => {
@@ -47,7 +50,23 @@ export default function App() {
 
   const sources = cfg.videos.length + cfg.comps.length
   return (
-    <div className="app">
+    <div
+      className={'app' + (dragOver ? ' dragging' : '')}
+      onDragOver={(e) => {
+        e.preventDefault()
+        setDragOver(true)
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget === e.target) setDragOver(false)
+      }}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDragOver(false)
+        if (e.dataTransfer.files.length && !sourcesApi.addDropped(e.dataTransfer.files)) {
+          sourcesApi.setError('Could not read dropped file paths here — use “Add files…” instead.')
+        }
+      }}
+    >
       <header className="top">
         <div className="brand">
           <span className="logo" aria-hidden>
@@ -107,21 +126,22 @@ export default function App() {
       </header>
       <div className="main">
         <div className="stage">
-          <Preview cfg={cfg} />
+          <Preview cfg={cfg} patch={patch} />
         </div>
         <aside className="panel">
           <nav className="tabs">
             {(
               [
-                ['videos', `Videos${sources ? ` (${sources})` : ''}`],
-                ['wall', 'Wall'],
-                ['look', 'Look'],
-                ['reveal', 'Power-on'],
-                ['ae', 'Build'],
-              ] as [Tab, string][]
-            ).map(([t, label]) => (
+                ['videos', `Videos${sources ? ` · ${sources}` : ''}`, TAB_ICONS.videos],
+                ['wall', 'Wall', TAB_ICONS.wall],
+                ['look', 'Look', TAB_ICONS.look],
+                ['reveal', 'Power-on', TAB_ICONS.reveal],
+                ['ae', 'Build', TAB_ICONS.ae],
+              ] as [Tab, string, ReactNode][]
+            ).map(([t, label, icon]) => (
               <button key={t} type="button" className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
-                {label}
+                {icon}
+                <span>{label}</span>
               </button>
             ))}
           </nav>
@@ -136,6 +156,40 @@ export default function App() {
       </div>
     </div>
   )
+}
+
+const TAB_ICONS = {
+  videos: (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+      <rect x="1.5" y="3" width="13" height="10" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M6.7 6.1v3.8l3.4-1.9-3.4-1.9Z" fill="currentColor" />
+    </svg>
+  ),
+  wall: (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+      <rect x="1.5" y="1.5" width="5.6" height="5.6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="8.9" y="1.5" width="5.6" height="5.6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="1.5" y="8.9" width="5.6" height="5.6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="8.9" y="8.9" width="5.6" height="5.6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  ),
+  look: (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+      <path d="M8 2.5c3.6 0 6 3.2 6.6 5.5-.6 2.3-3 5.5-6.6 5.5S2 10.3 1.4 8C2 5.7 4.4 2.5 8 2.5Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="8" cy="8" r="2.2" fill="currentColor" />
+    </svg>
+  ),
+  reveal: (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+      <path d="M8 1.5v6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M4.4 3.6a6 6 0 1 0 7.2 0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  ae: (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+      <path d="M9.2 1.2 3 9h4l-.9 5.8L12.9 7H9l.2-5.8Z" fill="currentColor" />
+    </svg>
+  ),
 }
 
 // re-exported for the debug console

@@ -26,12 +26,22 @@ export function Field({ label, children, hint }: { label: ReactNode; children: R
 }
 
 export function Slider({ label, value, min, max, step = 1, onChange, format, hint }: { label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; format?: (v: number) => string; hint?: string }) {
+  const pct = Math.max(0, Math.min(100, ((value - min) / Math.max(1e-9, max - min)) * 100))
   return (
     <label className="field slider">
       <span className="lbl">
         {label} <b>{format ? format(value) : value}</b>
       </span>
-      <input type="range" min={min} max={max} step={step} value={value} aria-label={label} onChange={(e) => onChange(parseFloat(e.target.value))} />
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        aria-label={label}
+        style={{ ['--fill' as never]: `${pct}%` }}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+      />
       {hint && <span className="fhint">{hint}</span>}
     </label>
   )
@@ -123,6 +133,51 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
           {o.label}
         </button>
       ))}
+    </div>
+  )
+}
+
+/** Compact − value + control for the numbers you nudge while watching the preview. */
+export function Stepper({ label, value, min, max, step = 1, onChange, format }: { label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; format?: (v: number) => string }) {
+  const [text, setText] = useState<string | null>(null)
+  const clamp = (v: number) => Math.min(max, Math.max(min, v))
+  const nudge = (d: number) => onChange(clamp(Math.round((value + d * step) / step) * step))
+  return (
+    <div className="stepper" role="group" aria-label={label}>
+      <span className="st-lbl">{label}</span>
+      <button type="button" aria-label={`Decrease ${label}`} onClick={() => nudge(-1)} disabled={value <= min}>
+        −
+      </button>
+      <input
+        value={text ?? (format ? format(value) : String(value))}
+        aria-label={label}
+        onFocus={(e) => {
+          setText(String(value))
+          e.target.select()
+        }}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => {
+          const v = parseFloat(text ?? '')
+          if (!Number.isNaN(v)) onChange(clamp(v))
+          setText(null)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          if (e.key === 'ArrowUp') {
+            e.preventDefault()
+            nudge(1)
+            setText(null)
+          }
+          if (e.key === 'ArrowDown') {
+            e.preventDefault()
+            nudge(-1)
+            setText(null)
+          }
+        }}
+      />
+      <button type="button" aria-label={`Increase ${label}`} onClick={() => nudge(1)} disabled={value >= max}>
+        +
+      </button>
     </div>
   )
 }

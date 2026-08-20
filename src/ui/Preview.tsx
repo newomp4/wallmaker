@@ -7,8 +7,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Config } from '../core/types'
 import { gridFor } from '../core/grid'
-import { planScreens, screenStateAt, withAnimation } from '../core/reveal'
+import { planScreens, planCamera, cameraAt, screenStateAt, withAnimation } from '../core/reveal'
 import { isCEP } from '../ae/cep'
+import { QuickBar } from './QuickBar'
+import { useSources } from './useSources'
 
 // ---- thumbnail cache (module-level: survives tab switches) ----
 const thumbs = new Map<string, HTMLCanvasElement | 'loading' | 'error'>()
@@ -87,7 +89,8 @@ function smoothstep(k: number): number {
   return c * c * (3 - 2 * c)
 }
 
-export function Preview({ cfg: rawCfg }: { cfg: Config }) {
+export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partial<Config>) => void }) {
+  const src = useSources(rawCfg, patch)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const mouse = useRef<{ x: number; y: number } | null>(null)
   const [t, setT] = useState(0)
@@ -96,6 +99,7 @@ export function Preview({ cfg: rawCfg }: { cfg: Config }) {
   const cfg = useMemo(() => withAnimation(rawCfg), [rawCfg])
   const grid = useMemo(() => gridFor(cfg), [cfg])
   const screens = useMemo(() => planScreens(cfg, grid), [cfg, grid])
+  const camera = useMemo(() => planCamera(cfg, grid, screens), [cfg, grid, screens])
   const sourceCount = cfg.videos.length + cfg.comps.length
 
   useEffect(() => {
@@ -153,12 +157,14 @@ export function Preview({ cfg: rawCfg }: { cfg: Config }) {
       ctx.fillStyle = /^#[0-9a-f]{6}$/i.test(cfg.bgColor) ? cfg.bgColor : '#0a0a0c'
       ctx.fillRect(0, 0, W, H)
     }
-    const cw = grid.cellW * scale
-    const ch = grid.cellH * scale
-    const gap = cfg.gap * scale
-    const cx0 = W / 2
-    const cy0 = H / 2
-    const baseRadius = cfg.cornerRadius * scale
+    // the camera move scales/offsets the whole wall exactly like the null keyframes do in AE
+    const cam = cameraAt(t, camera, cfg.durationSec)
+    const cw = grid.cellW * scale * cam.k
+    const ch = grid.cellH * scale * cam.k
+    const gap = cfg.gap * scale * cam.k
+    const cx0 = W / 2 + cam.x * scale
+    const cy0 = H / 2 + cam.y * scale
+    const baseRadius = cfg.cornerRadius * scale * cam.k
     const focus = cfg.focus && mouse.current ? mouse.current : null
 
     // borders sit under the screens: visible in gaps and where screens are off
@@ -187,7 +193,7 @@ export function Preview({ cfg: rawCfg }: { cfg: Config }) {
       let sc = st.scale
       if (focus) {
         const dd = Math.hypot(px - focus.x, py - focus.y)
-        const k = smoothstep(1 - dd / Math.max(1, cfg.focusRadius * scale))
+        const k = smoothstep(1 - dd / Math.max(1, cfg.focusRadius * scale * cam.k))
         sc *= 1 + (cfg.focusZoom / 100 - 1) * k
         opacity *= 1 - Math.min(1, cfg.focusDim / 100) * (1 - k)
       }
@@ -206,7 +212,7 @@ export function Preview({ cfg: rawCfg }: { cfg: Config }) {
       ctx.globalAlpha = Math.min(1, opacity)
       rr(ctx, px - w / 2, py - h / 2, w, h, radius)
       ctx.clip()
-      const isComp = s.v >= cfg.videos.length
+      const isComp = s.v >= cfg.videos.length && s.v - cfg.videos.length < cfg.comps.length
       const srcName = isComp ? (cfg.comps[s.v - cfg.videos.length]?.name ?? 'comp') : (cfg.videos[s.v] ?? String(s.v))
       const thumb = isComp ? undefined : thumbs.get(cfg.videos[s.v] ?? '')
       if (thumb && typeof thumb !== 'string') {
@@ -240,6 +246,15 @@ export function Preview({ cfg: rawCfg }: { cfg: Config }) {
           ctx.textAlign = 'start'
         }
       }
+      if (s.featured && w >= 20) {
+        ctx.strokeStyle = 'rgba(134,239,172,.9)'
+        ctx.lineWidth = Math.max(1.25, 2 * scale * cam.k)
+        ctx.shadowColor = 'rgba(134,239,172,.5)'
+        ctx.shadowBlur = 6 * scale * cam.k
+        rr(ctx, px - w / 2, py - h / 2, w, h, radius)
+        ctx.stroke()
+        ctx.shadowBlur = 0
+      }
       if (showLabels) {
         ctx.fillStyle = 'rgba(255,255,255,.85)'
         ctx.font = `${Math.max(8, Math.round(ch * 0.13))}px ui-monospace, Menlo, monospace`
@@ -251,8 +266,8 @@ export function Preview({ cfg: rawCfg }: { cfg: Config }) {
 
     // scanlines across the whole wall
     if (cfg.scanlines && cfg.scanStrength > 0) {
-      const wallW = grid.wallW * scale
-      const wallH = grid.wallH * scale
+      const wallW = grid.wallW * scale * cam.k
+      const wallH = grid.wallH * scale * cam.k
       ctx.save()
       ctx.globalAlpha = (cfg.scanStrength / 100) * 0.55
       ctx.fillStyle = '#000'
@@ -262,7 +277,7 @@ export function Preview({ cfg: rawCfg }: { cfg: Config }) {
       }
       ctx.restore()
     }
-  }, [cfg, grid, screens, t, hoverTick])
+  }, [cfg, grid, screens, camera, t, hoverTick])
 
   const loaded = cfg.videos.filter((p) => {
     const th = thumbs.get(p)
@@ -277,7 +292,46 @@ export function Preview({ cfg: rawCfg }: { cfg: Config }) {
   return (
     <>
       <div className="preview-wrap">
-        <div className={'preview-stage' + (cfg.background === 'transparent' ? ' checker' : '')}>
+        {sourceCount === 0 && (
+          <div className="stage-empty">
+            <svg width="44" height="44" viewBox="0 0 32 32" aria-hidden>
+              <g fill="currentColor">
+                <rect x="3" y="3" width="7.6" height="7.6" rx="1.4" />
+                <rect x="12.2" y="3" width="7.6" height="7.6" rx="1.4" opacity=".8" />
+                <rect x="21.4" y="3" width="7.6" height="7.6" rx="1.4" opacity=".3" />
+                <rect x="3" y="12.2" width="7.6" height="7.6" rx="1.4" opacity=".5" />
+                <rect x="12.2" y="12.2" width="7.6" height="7.6" rx="1.4" />
+                <rect x="21.4" y="12.2" width="7.6" height="7.6" rx="1.4" opacity=".7" />
+                <rect x="3" y="21.4" width="7.6" height="7.6" rx="1.4" opacity=".2" />
+                <rect x="12.2" y="21.4" width="7.6" height="7.6" rx="1.4" opacity=".6" />
+                <rect x="21.4" y="21.4" width="7.6" height="7.6" rx="1.4" />
+              </g>
+            </svg>
+            <h2>Give the wall something to play</h2>
+            <p>{src.inAE ? 'Add a folder of clips, pick files, use your Project-panel selection — or just drop videos anywhere on this window.' : 'This is the preview — sources, comps and building live inside the After Effects panel.'}</p>
+            <div className="btns">
+              {src.inAE ? (
+                <>
+                  <button type="button" className="btn primary" onClick={src.addFolder}>
+                    Add a folder…
+                  </button>
+                  <button type="button" className="btn" onClick={src.addFiles}>
+                    Add files…
+                  </button>
+                  <button type="button" className="btn" onClick={src.addSelection}>
+                    From selection
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="btn primary" onClick={src.addSamples}>
+                  Try it with 12 sample clips
+                </button>
+              )}
+            </div>
+            {src.error && <p className="hint err">{src.error}</p>}
+          </div>
+        )}
+        <div className={'preview-stage' + (cfg.background === 'transparent' ? ' checker' : '') + (sourceCount === 0 ? ' dimmed' : '')}>
           <canvas
             ref={canvasRef}
             style={{ maxWidth: '100%', height: 'auto', cursor: cfg.focus ? 'crosshair' : 'default' }}
@@ -301,14 +355,27 @@ export function Preview({ cfg: rawCfg }: { cfg: Config }) {
           {cfg.focus ? ' · move the mouse over the wall to play the Focus null' : ''}
         </div>
       </div>
+      <QuickBar cfg={rawCfg} patch={patch} />
       <div className="transport">
         <button type="button" className={'icon' + (playing ? '' : ' primary')} aria-label={playing ? 'Pause' : 'Play'} onClick={() => setPlaying(!playing)}>
-          {playing ? '❚❚' : '▶'}
+          {playing ? (
+            <svg width="11" height="12" viewBox="0 0 11 12" aria-hidden>
+              <rect x="1" y="1" width="3.2" height="10" rx="1" fill="currentColor" />
+              <rect x="6.8" y="1" width="3.2" height="10" rx="1" fill="currentColor" />
+            </svg>
+          ) : (
+            <svg width="11" height="12" viewBox="0 0 11 12" aria-hidden>
+              <path d="M1.5 1.6c0-.8.9-1.3 1.6-.9l7.2 4.4c.7.4.7 1.4 0 1.8L3.1 11.3c-.7.4-1.6-.1-1.6-.9V1.6Z" fill="currentColor" />
+            </svg>
+          )}
         </button>
         <button type="button" className="icon" aria-label="Replay from the start" title="Replay from the start" onClick={replay}>
-          ⟲
+          <svg width="13" height="13" viewBox="0 0 14 14" aria-hidden>
+            <path d="M7 2.2a4.8 4.8 0 1 1-4.55 3.3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            <path d="M2 1v3h3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </button>
-        <input type="range" min={0} max={cfg.durationSec} step={1 / cfg.fps} value={Math.min(t, cfg.durationSec)} onChange={(e) => setT(parseFloat(e.target.value))} />
+        <input type="range" className="timeline" min={0} max={cfg.durationSec} step={1 / cfg.fps} value={Math.min(t, cfg.durationSec)} aria-label="Preview time" onChange={(e) => setT(parseFloat(e.target.value))} />
         <span className="time">
           {t.toFixed(1)} / {cfg.durationSec.toFixed(1)} s
         </span>

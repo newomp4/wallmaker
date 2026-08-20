@@ -4,7 +4,7 @@
  */
 import type { Config, FillMode, GridSpec, ScreenSpec } from './types'
 import { gridFor } from './grid'
-import { planScreens, withAnimation } from './reveal'
+import { planScreens, planCamera, withAnimation, type CameraPlan } from './reveal'
 
 export interface WallScene {
   version: 1
@@ -21,11 +21,12 @@ export interface WallScene {
   borders: { width: number; color: [number, number, number] } | null
   scanlines: { strength: number } | null
   focus: { radius: number; zoom: number; dim: number } | null
+  camera: CameraPlan | null
   mute: boolean
   loop: boolean
   reveal: { mode: string; start: number; duration: number; animFrames: number; style: string; deadPct: number; dropouts: number; seed: number }
   videos: { path?: string; compId?: number; name: string }[]
-  screens: { i: number; row: number; col: number; v: number; th: number; dead: number; offset: number; span: number }[]
+  screens: { i: number; row: number; col: number; v: number; th: number; dead: number; offset: number; span: number; featured?: boolean }[]
 }
 
 export function safeCompName(name: string): string {
@@ -101,6 +102,7 @@ export function compileWall(rawCfg: Config, opts?: { grid?: GridSpec; screens?: 
     borders: cfg.borders ? { width: cfg.borderWidth, color: hexToRgb(cfg.borderColor) } : null,
     scanlines: cfg.scanlines ? { strength: cfg.scanStrength } : null,
     focus: cfg.focus ? { radius: cfg.focusRadius, zoom: cfg.focusZoom, dim: cfg.focusDim } : null,
+    camera: planCamera(cfg, grid, screens),
     mute: cfg.muteAudio,
     loop: cfg.loop,
     reveal: {
@@ -114,6 +116,6 @@ export function compileWall(rawCfg: Config, opts?: { grid?: GridSpec; screens?: 
       seed: cfg.seed,
     },
     videos: unique,
-    screens: screens.map((s) => ({ i: s.i, row: s.row, col: s.col, v: indexOf.get(sourceKeys[s.v % sourceKeys.length])!, th: s.th, dead: s.dead, offset: s.offset, span: s.span })),
+    screens: screens.map((s) => ({ i: s.i, row: s.row, col: s.col, v: indexOf.get(sourceKeys[s.v % sourceKeys.length])!, th: s.th, dead: s.dead, offset: s.offset, span: s.span, featured: s.featured || undefined })),
   }
 }

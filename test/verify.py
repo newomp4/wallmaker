@@ -29,6 +29,28 @@ def fail(msg):
     failures.append(msg)
     print('  ✗', msg)
 
+# ---------- camera model (mirrors planCamera / the null keyframes) ----------
+cam = wall.get('camera')
+DUR = wall['durationSec']
+def cam_phase(t):
+    """'zoomed' | 'neutral' | 'moving' at time t"""
+    if not cam:
+        return 'neutral'
+    if cam.get('intro'):
+        h, dr = cam['intro']['hold'], cam['intro']['dur']
+        if t <= h - 0.02:
+            return 'zoomed'
+        if t < h + dr + 0.1:
+            return 'moving'
+    if cam.get('outro'):
+        e = DUR - cam['outro']['hold']
+        st_ = e - cam['outro']['dur']
+        if t >= e - 0.02:
+            return 'zoomed'
+        if t > st_ - 0.1:
+            return 'moving'
+    return 'neutral'
+
 # ---------- probes: post-expression opacity of every screen ----------
 spec_by_idx = {s['i']: s for s in wall['screens']}
 assert len(result['probes']) >= 3, 'expected 3 probe times'
@@ -72,16 +94,52 @@ if not (expected_on <= actual_on <= expected_max):
 else:
     print(f'  on-count at t={mid_t}: {actual_on} (plan: {expected_on}..{expected_max}) — ok')
 
+# ---------- camera: the Controls null's evaluated Scale/Position must match the plan ----------
+if cam and 'ctls' in result:
+    kexp = cam['scale']
+    W, H = wall['frame']['w'], wall['frame']['h']
+    zoom_pos = [W / 2 - kexp / 100 * cam['p'][0], H / 2 - kexp / 100 * cam['p'][1]]
+    for tkey, ctl in result['ctls'].items():
+        ph = cam_phase(float(tkey))
+        if ph == 'moving':
+            continue
+        want_s, want_p = (kexp, zoom_pos) if ph == 'zoomed' else (100.0, [W / 2, H / 2])
+        if abs(ctl['scale'][0] - want_s) > 0.6 or abs(ctl['pos'][0] - want_p[0]) > 1.5 or abs(ctl['pos'][1] - want_p[1]) > 1.5:
+            fail(f'camera t={tkey} ({ph}): scale {ctl["scale"][0]:.2f} pos {ctl["pos"][0]:.1f},{ctl["pos"][1]:.1f}, expected {want_s:.2f} @ {want_p[0]:.1f},{want_p[1]:.1f}')
+        else:
+            print(f'  camera t={tkey}: {ph} — ok (scale {ctl["scale"][0]:.1f})')
+
 # ---------- snapshots: sample every cell center ----------
 def hex_rgb(h):
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
 bg = hex_rgb(json.loads((round_dir / 'config.json').read_text())['bgColor'].lstrip('#'))
+featured_screen = next((s for s in wall['screens'] if s.get('featured')), None)
 for tkey, probe in result['probes'].items():
     t = float(tkey)
     img = Image.open(round_dir / f'snap-{tkey}.png').convert('RGB')
     assert img.size == (wall['frame']['w'], wall['frame']['h']), f'snapshot size {img.size}'
     op_by_idx = {row['idx']: row['opacity'] for row in probe}
+    phase = cam_phase(t)
+    if phase != 'neutral':
+        if phase == 'zoomed' and featured_screen is not None:
+            # fully zoomed onto the featured screen: the whole frame is that source
+            name = wall['videos'][featured_screen['v']]['name']
+            if name in colors:
+                want = hex_rgb(colors[name])
+                W, H = img.size
+                for px_, py_ in [(W // 2, H // 2), (W // 5, H // 5), (4 * W // 5, 4 * H // 5)]:
+                    got = img.getpixel((px_, py_))
+                    if any(abs(g - w) > 48 for g, w in zip(got, want)):
+                        fail(f'snap t={t} zoomed: pixel {px_},{py_} rgb {got}, expected featured ~{want}')
+                print(f'  snapshot t={t}: zoomed-in frame is the featured screen — ok')
+        continue
+    # wall smaller than the comp (locked cell aspect / margins): the band above it must be background
+    band = (wall['frame']['h'] - wall['grid']['wallH']) / 2
+    if band > 12 and json.loads((round_dir / 'config.json').read_text())['background'] != 'transparent':
+        got = img.getpixel((wall['frame']['w'] // 2, int(band / 2)))
+        if any(abs(g - b) > 26 for g, b in zip(got, bg)):
+            fail(f'snap t={t}: margin band rgb {got}, expected bg {bg}')
     checked = 0
     for s in wall['screens']:
         span = s.get('span', 1)

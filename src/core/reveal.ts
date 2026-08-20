@@ -45,43 +45,57 @@ export function planScreens(cfg: Config, grid?: GridSpec): ScreenSpec[] {
   const rngOffset = mulberry32(cfg.seed * 4 + 4)
   const rngHero = mulberry32(cfg.seed * 4 + 5)
 
-  // hero screens occupy 2×2 blocks of the slot grid; everything else is one slot each
+  // multi-cell screens occupy blocks of the slot grid; everything else is one slot each.
+  // The featured screen (if any) reserves the centermost block FIRST, then heroes scatter.
   const occupied = new Uint8Array(g.rows * g.cols)
-  const heroes: { row: number; col: number }[] = []
+  const spanAt = new Map<number, { span: number; featured: boolean }>()
+  const reserve = (row: number, col: number, span: number, featured: boolean): boolean => {
+    if (row < 0 || col < 0 || row + span > g.rows || col + span > g.cols) return false
+    for (let r = row; r < row + span; r++) for (let c = col; c < col + span; c++) if (occupied[r * g.cols + c]) return false
+    for (let r = row; r < row + span; r++) for (let c = col; c < col + span; c++) occupied[r * g.cols + c] = 1
+    spanAt.set(row * g.cols + col, { span, featured })
+    return true
+  }
+  const nvAll = cfg.videos.length + cfg.comps.length
+  const wantFeatured = cfg.featured >= 0 && nvAll > 0
+  if (wantFeatured) {
+    const span = cfg.featuredSpan >= 2 && g.rows >= 2 && g.cols >= 2 ? 2 : 1
+    const placed = reserve(Math.floor((g.rows - span) / 2), Math.floor((g.cols - span) / 2), span, true)
+    if (!placed) reserve(Math.floor((g.rows - 1) / 2), Math.floor((g.cols - 1) / 2), 1, true)
+  }
   const wantHeroes = g.rows >= 2 && g.cols >= 2 ? Math.min(cfg.heroes, Math.floor((g.rows * g.cols) / 4)) : 0
-  for (let attempt = 0; attempt < 400 && heroes.length < wantHeroes; attempt++) {
-    const row = Math.floor(rngHero() * (g.rows - 1))
-    const col = Math.floor(rngHero() * (g.cols - 1))
-    let free = true
-    for (let r = row; r <= row + 1; r++) for (let c = col; c <= col + 1; c++) if (occupied[r * g.cols + c]) free = false
-    if (!free) continue
-    for (let r = row; r <= row + 1; r++) for (let c = col; c <= col + 1; c++) occupied[r * g.cols + c] = 1
-    heroes.push({ row, col })
+  let placedHeroes = 0
+  for (let attempt = 0; attempt < 400 && placedHeroes < wantHeroes; attempt++) {
+    if (reserve(Math.floor(rngHero() * (g.rows - 1)), Math.floor(rngHero() * (g.cols - 1)), 2, false)) placedHeroes++
   }
 
-  // one screen per hero + one per remaining free slot, in reading order (heroes at their anchor slot)
-  const heroAt = new Map<number, boolean>()
-  for (const h of heroes) heroAt.set(h.row * g.cols + h.col, true)
-  const slots: { row: number; col: number; span: number }[] = []
+  // one screen per reserved block + one per remaining free slot, in reading order
+  const slots: { row: number; col: number; span: number; featured: boolean }[] = []
   for (let r = 0; r < g.rows; r++)
     for (let c = 0; c < g.cols; c++) {
       const k = r * g.cols + c
-      if (heroAt.get(k)) slots.push({ row: r, col: c, span: 2 })
-      else if (!occupied[k]) slots.push({ row: r, col: c, span: 1 })
+      const block = spanAt.get(k)
+      if (block) slots.push({ row: r, col: c, span: block.span, featured: block.featured })
+      else if (!occupied[k]) slots.push({ row: r, col: c, span: 1, featured: false })
     }
   const n = slots.length
   const nv = Math.max(1, cfg.videos.length + cfg.comps.length)
 
-  // video per screen
+  // video per screen. The featured source is pinned to its own screen — keep it OUT of the
+  // general rotation (unless it is the only source), so "my video, centered" stays unique.
+  const featuredIdx = wantFeatured ? Math.min(cfg.featured, nvAll - 1) : -1
+  const pool: number[] = []
+  for (let v = 0; v < nv; v++) if (v !== featuredIdx || nv === 1) pool.push(v)
+  const np = pool.length
   let vids: number[]
   if (cfg.assign === 'shuffle') {
-    const pool: number[] = []
-    while (pool.length < n) for (let v = 0; v < nv && pool.length < n; v++) pool.push(v)
-    vids = shuffled(pool, rngAssign)
+    const rep: number[] = []
+    while (rep.length < n) for (let v = 0; v < np && rep.length < n; v++) rep.push(pool[v])
+    vids = shuffled(rep, rngAssign)
   } else if (cfg.assign === 'random') {
-    vids = Array.from({ length: n }, () => Math.floor(rngAssign() * nv))
+    vids = Array.from({ length: n }, () => pool[Math.floor(rngAssign() * np)])
   } else {
-    vids = Array.from({ length: n }, (_, i) => i % nv)
+    vids = Array.from({ length: n }, (_, i) => pool[i % np])
   }
 
   // reveal order → evenly spread thresholds (one screen at a time when the mode is 'random' etc.)
@@ -93,16 +107,94 @@ export function planScreens(cfg: Config, grid?: GridSpec): ScreenSpec[] {
   const th = new Array<number>(n)
   for (let r = 0; r < n; r++) th[ranked[r].i] = cfg.reveal === 'none' ? 0 : ((r + 0.5) / n) * 100
 
-  return slots.map((slot, i) => ({
-    i,
-    row: slot.row,
-    col: slot.col,
-    v: vids[i],
-    th: Math.round(th[i] * 100) / 100,
-    dead: Math.round(rngDead() * 10000) / 10000,
-    offset: Math.round((cfg.randomStart ? rngOffset() * 0.95 : 0) * 10000) / 10000,
-    span: slot.span,
-  }))
+  const featuredSrc = featuredIdx
+  return slots.map((slot, i) => {
+    const dead = Math.round(rngDead() * 10000) / 10000
+    const offset = Math.round((cfg.randomStart ? rngOffset() * 0.95 : 0) * 10000) / 10000
+    if (slot.featured) {
+      // pinned: plays the chosen source from its start, on from the first moment, can't be dead
+      return { i, row: slot.row, col: slot.col, v: featuredSrc, th: 0, dead: 1, offset: 0, span: slot.span, featured: true }
+    }
+    return { i, row: slot.row, col: slot.col, v: vids[i], th: Math.round(th[i] * 100) / 100, dead, offset, span: slot.span }
+  })
+}
+
+// ---------------------------------------------------------------- camera
+
+export interface CameraPlan {
+  /** index (into the screens array) of the screen the camera starts on / returns to */
+  target: number
+  /** the target screen's center offset from the wall center, px */
+  p: [number, number]
+  /** Controls-null scale (%) at which the target screen fills the comp */
+  scale: number
+  intro: { hold: number; dur: number } | null
+  outro: { hold: number; dur: number } | null
+}
+
+/** The camera move (if any): which screen it locks onto and how far in it must be to fill the comp. */
+export function planCamera(cfg: Config, grid: GridSpec, screens: ScreenSpec[]): CameraPlan | null {
+  if (cfg.intro === 'none' && cfg.outro === 'none') return null
+  if (!screens.length) return null
+  // the featured screen, else the one closest to the wall center
+  let target = screens.findIndex((s) => s.featured)
+  if (target < 0) {
+    let bestD = Infinity
+    for (let i = 0; i < screens.length; i++) {
+      const s = screens[i]
+      const x = (s.col + (s.span - 1) / 2 - (grid.cols - 1) / 2) * (grid.cellW + cfg.gap)
+      const y = (s.row + (s.span - 1) / 2 - (grid.rows - 1) / 2) * (grid.cellH + cfg.gap)
+      const d = x * x + y * y - s.span * 0.5 // prefer bigger screens on ties
+      if (d < bestD) {
+        bestD = d
+        target = i
+      }
+    }
+  }
+  const t = screens[target]
+  const w = grid.cellW * t.span + cfg.gap * (t.span - 1)
+  const h = grid.cellH * t.span + cfg.gap * (t.span - 1)
+  return {
+    target,
+    p: [
+      Math.round(((t.col + (t.span - 1) / 2 - (grid.cols - 1) / 2) * (grid.cellW + cfg.gap)) * 100) / 100,
+      Math.round(((t.row + (t.span - 1) / 2 - (grid.rows - 1) / 2) * (grid.cellH + cfg.gap)) * 100) / 100,
+    ],
+    scale: Math.round(Math.max(cfg.compW / w, cfg.compH / h) * 100.2 * 100) / 100,
+    intro: cfg.intro === 'zoomOut' ? { hold: Math.max(0, cfg.introHold), dur: Math.max(0.1, cfg.introDur) } : null,
+    outro: cfg.outro === 'zoomIn' ? { hold: Math.max(0, cfg.outroHold), dur: Math.max(0.1, cfg.outroDur) } : null,
+  }
+}
+
+export interface CameraState {
+  /** 1 = neutral */
+  k: number
+  /** where the wall center sits, relative to the comp center, comp px */
+  x: number
+  y: number
+}
+
+/** The camera at time t — mirrors the eased keyframes the build writes on the Controls null. */
+export function cameraAt(t: number, cam: CameraPlan | null, durationSec: number): CameraState {
+  if (!cam) return { k: 1, x: 0, y: 0 }
+  const kIn = cam.scale / 100
+  const zoomed = { k: kIn, x: -kIn * cam.p[0], y: -kIn * cam.p[1] }
+  const mix = (u: number): CameraState => {
+    const e = u * u * (3 - 2 * u) // approximates the easy-eased keyframes
+    return { k: kIn + (1 - kIn) * e, x: zoomed.x * (1 - e), y: zoomed.y * (1 - e) }
+  }
+  if (cam.intro) {
+    const t1 = cam.intro.hold
+    if (t <= t1) return zoomed
+    if (t < t1 + cam.intro.dur) return mix((t - t1) / cam.intro.dur)
+  }
+  if (cam.outro) {
+    const tEnd = durationSec - cam.outro.hold
+    const tStart = tEnd - cam.outro.dur
+    if (t >= tEnd) return zoomed
+    if (t > tStart) return mix(1 - (t - tStart) / cam.outro.dur)
+  }
+  return { k: 1, x: 0, y: 0 }
 }
 
 export interface ScreenState {

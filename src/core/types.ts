@@ -5,6 +5,7 @@ export type FillMode = 'cover' | 'contain' | 'stretch'
 export type Assign = 'sequential' | 'shuffle' | 'random'
 export type Background = 'dark' | 'static' | 'transparent'
 export type RevealMode = 'none' | 'random' | 'rows' | 'cols' | 'scanline' | 'center' | 'edges' | 'diagonal'
+export type CellAspect = 'fill' | 'wide' | 'tv' | 'square' | 'tall' | 'custom'
 export type ScreenAnim = 'cut' | 'fade' | 'flicker' | 'pop'
 
 export interface CompRef {
@@ -35,6 +36,10 @@ export interface Config {
   fill: FillMode
   /** rounded screen corners, px (in cell space) */
   cornerRadius: number
+  /** cell shape: stretch to fill the comp, or lock to an aspect ratio (wall stays centered) */
+  cellAspect: CellAspect
+  /** w/h when cellAspect is 'custom' */
+  cellAspectCustom: number
 
   // ---- sources / screens ----
   assign: Assign
@@ -47,6 +52,20 @@ export interface Config {
 
   /** monitors that span 2×2 cells (the big screens on a CCTV wall) */
   heroes: number
+  /** index into the source list (videos then comps) of a screen pinned to the center, always on; -1 = none */
+  featured: number
+  /** the featured screen's size: 1 = one cell, 2 = a 2×2 block */
+  featuredSpan: number
+
+  // ---- camera (keyframed on the Controls null) ----
+  /** start zoomed onto one screen (the featured one, else the centermost), then pull back to the wall */
+  intro: 'none' | 'zoomOut'
+  introHold: number
+  introDur: number
+  /** push back into that screen at the end */
+  outro: 'none' | 'zoomIn'
+  outroHold: number
+  outroDur: number
 
   // ---- look ----
   background: Background
@@ -103,6 +122,8 @@ export interface ScreenSpec {
   offset: number
   /** cells spanned per axis: 1 = normal, 2 = hero (2×2) */
   span: number
+  /** pinned to the wall center, always on, plays from its start */
+  featured?: boolean
 }
 
 export interface GridSpec {

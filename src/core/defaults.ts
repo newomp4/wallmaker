@@ -16,6 +16,8 @@ export const DEFAULT_CONFIG: Config = {
   margin: 0,
   fill: 'cover',
   cornerRadius: 0,
+  cellAspect: 'fill',
+  cellAspectCustom: 1.7778,
 
   assign: 'sequential',
   randomStart: true,
@@ -25,6 +27,15 @@ export const DEFAULT_CONFIG: Config = {
   labelPrefix: 'CAM',
 
   heroes: 0,
+  featured: -1,
+  featuredSpan: 2,
+
+  intro: 'none',
+  introHold: 1,
+  introDur: 2,
+  outro: 'none',
+  outroHold: 0.5,
+  outroDur: 2,
 
   background: 'dark',
   bgColor: '#0a0a0c',
