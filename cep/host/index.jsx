@@ -551,6 +551,7 @@ $.global.WALLMAKER = (function () {
     addSlider(fx, 'Gap (px)', num(d.grid.gap, 0), rec);
     addSlider(fx, 'Screen scale (%)', 100, rec);
     addSlider(fx, 'Screens opacity (%)', 100, rec);
+    addSlider(fx, 'Layout opacity (%)', 22, rec);
     // controls that older builds may have left behind
     removeSlider(fx, 'Label opacity (%)', rec);
     removeSlider(fx, 'Static brightness (%)', rec);
@@ -722,6 +723,108 @@ $.global.WALLMAKER = (function () {
     st.built++;
   }
 
+  // ---------------------------------------------------------------- layout guide
+
+  /**
+   * One shape layer holding EVERY cell as a low-opacity rectangle: no reveal, no dead screens, no
+   * footage. Built from the same numbers and the same live Gap slider as the screens, so the boxes
+   * sit exactly where the videos do. Off by default; the panel's "Layout only" switch turns it on
+   * and switches the video layers off, which makes scrubbing a camera move essentially free.
+   */
+  function buildLayout() {
+    var d = st.data;
+    var l = st.main.layers.addShape();
+    l.name = 'Wallmaker Layout';
+    l.comment = TAG + '-layout';
+    l.enabled = false;
+    l.parent = st.ctl;
+    // AE rewrites a child's transform when you parent it, to preserve its world transform -- and the
+    // camera's scale is an expression that may evaluate to 700% right now. Set BOTH position and
+    // scale afterwards or the guide inherits the inverse of the zoom and renders tiny.
+    tf(l).property('ADBE Anchor Point').setValue([0, 0]);
+    tf(l).property('ADBE Position').setValue([0, 0]);
+    tf(l).property('ADBE Scale').setValue([100, 100]);
+    try {
+      tf(l).property('ADBE Rotate Z').setValue(0);
+    } catch (eR) {}
+    var lib = exprLib();
+    var gapRef = 'C(' + q('Gap (px)') + ', ' + num(d.grid.gap, 0) + ')';
+    var grp = l.property('ADBE Root Vectors Group').addProperty('ADBE Vector Group');
+    grp.name = 'cells';
+    var gg = grp.property('ADBE Vectors Group');
+    var rect = gg.addProperty('ADBE Vector Shape - Rect');
+    rect.property('ADBE Vector Rect Size').setValue([d.grid.cellW, d.grid.cellH]);
+    rect.property('ADBE Vector Rect Position').setValue([0, 0]);
+    rect.property('ADBE Vector Rect Roundness').setValue(num(d.cornerRadius, 0));
+    var fill = gg.addProperty('ADBE Vector Graphic - Fill');
+    fill.property('ADBE Vector Fill Color').setValue([1, 1, 1, 1]);
+    var rep1 = gg.addProperty('ADBE Vector Filter - Repeater');
+    rep1.property('ADBE Vector Repeater Copies').setValue(d.grid.cols);
+    var rt1 = rep1.property('ADBE Vector Repeater Transform');
+    rt1.property('ADBE Vector Repeater Position').setValue([d.grid.cellW + d.grid.gap, 0]);
+    try {
+      rt1.property('ADBE Vector Repeater Position').expression = lib + '[' + d.grid.cellW + ' + ' + gapRef + ', 0]';
+    } catch (e1) {}
+    var rep2 = gg.addProperty('ADBE Vector Filter - Repeater');
+    rep2.property('ADBE Vector Repeater Copies').setValue(d.grid.rows);
+    var rt2 = rep2.property('ADBE Vector Repeater Transform');
+    rt2.property('ADBE Vector Repeater Position').setValue([0, d.grid.cellH + d.grid.gap]);
+    try {
+      rt2.property('ADBE Vector Repeater Position').expression = lib + '[0, ' + d.grid.cellH + ' + ' + gapRef + ']';
+    } catch (e2) {}
+    var gt = grp.property('ADBE Vector Transform Group');
+    gt.property('ADBE Vector Position').setValue([-((d.grid.cols - 1) / 2) * (d.grid.cellW + d.grid.gap), -((d.grid.rows - 1) / 2) * (d.grid.cellH + d.grid.gap)]);
+    try {
+      gt.property('ADBE Vector Position').expression =
+        lib + 'var g = ' + gapRef + ';\n[-(' + ((d.grid.cols - 1) / 2) + ') * (' + d.grid.cellW + ' + g), -(' + ((d.grid.rows - 1) / 2) + ') * (' + d.grid.cellH + ' + g)]';
+    } catch (e3) {}
+    try {
+      tf(l).property('ADBE Opacity').expression = lib + 'C(' + q('Layout opacity (%)') + ', 22)';
+    } catch (e4) {}
+    st.layoutLayer = l;
+  }
+
+  /** Show the layout boxes and switch the video layers off (or the other way round). */
+  function layoutOnly(json) {
+    var a = args(json);
+    var key = String(a.buildKey || '');
+    var comp = null;
+    var items = app.project.items;
+    for (var i = 1; i <= items.length; i++) if (items[i] instanceof CompItem && items[i].comment === TAG + '-comp ' + key) comp = items[i];
+    if (!comp) return reply({ found: false, on: false, screens: 0 });
+    var mat = null;
+    var ctl = null;
+    var screens = [];
+    for (var k = 1; k <= comp.numLayers; k++) {
+      var l = comp.layer(k);
+      var cm = String(l.comment || '');
+      if (cm.indexOf(TAG + '-layout') === 0) mat = l;
+      else if (cm.indexOf(TAG + '-screen') === 0) screens.push(l);
+      else if (cm.indexOf(TAG + '-controls') === 0) ctl = l;
+    }
+    if (!mat) return reply({ found: false, on: false, screens: screens.length });
+    if (typeof a.on === 'boolean') {
+      app.beginUndoGroup('Wallmaker: layout ' + (a.on ? 'on' : 'off'));
+      try {
+        mat.enabled = a.on;
+        for (var m = 0; m < screens.length; m++) {
+          try {
+            screens[m].enabled = !a.on;
+          } catch (eS) {}
+        }
+        if (ctl) {
+          // remember it, so a rebuild comes back the way you were working
+          var rec = recOf(ctl);
+          rec.__layout = a.on ? 1 : 0;
+          setRec(ctl, rec);
+        }
+      } finally {
+        app.endUndoGroup();
+      }
+    }
+    return reply({ found: true, on: !!mat.enabled, screens: screens.length });
+  }
+
   // ---------------------------------------------------------------- background
 
   function buildBackground() {
@@ -768,6 +871,7 @@ $.global.WALLMAKER = (function () {
         cam: null,
         centreLayer: null,
         bgLayer: null,
+        layoutLayer: null,
         ctlRec: null,
         camRec: null,
         keptCamKeys: false,
@@ -832,6 +936,7 @@ $.global.WALLMAKER = (function () {
       setRec(st.cam, st.camRec || {});
       setRec(st.ctl, st.ctlRec || {});
       buildBackground();
+      buildLayout();
       return reply({ total: data.screens.length });
     } finally {
       app.endUndoGroup();
@@ -862,11 +967,22 @@ $.global.WALLMAKER = (function () {
     }
     app.beginUndoGroup('Wallmaker: build (finish)');
     try {
-      // bottom to top: Background, screens, the centred screen, Controls, Camera
+      // bottom to top: Background, screens, the centred screen, Layout, Controls, Camera
       if (st.bgLayer) st.bgLayer.moveToEnd();
       if (st.centreLayer) st.centreLayer.moveToBeginning();
+      if (st.layoutLayer) st.layoutLayer.moveToBeginning();
       if (st.ctl) st.ctl.moveToBeginning();
       if (st.cam) st.cam.moveToBeginning();
+      // a rebuild comes back the way you were working: layout on stays on
+      if (st.layoutLayer && st.ctlRec && st.ctlRec.__layout) {
+        try {
+          st.layoutLayer.enabled = true;
+          for (var li = 1; li <= st.main.numLayers; li++) {
+            var ll = st.main.layer(li);
+            if (typeof ll.comment === 'string' && ll.comment.indexOf(TAG + '-screen') === 0) ll.enabled = false;
+          }
+        } catch (eLay) {}
+      }
       // drop footage that no build uses any more (e.g. a rebuild with a different set of videos)
       if (st.footFolder) {
         for (var i = st.footFolder.numItems; i >= 1; i--) {
@@ -1129,5 +1245,5 @@ $.global.WALLMAKER = (function () {
     return reply(out);
   }
 
-  return { info: info, begin: begin, step: step, finish: finish, remove: removeBuild, selectedSources: selectedSources, proxies: proxies, sourceDims: sourceDims, snapshot: snapshot, probe: probe, camState: camState, layers: layersInfo, version: VERSION };
+  return { info: info, begin: begin, step: step, finish: finish, remove: removeBuild, selectedSources: selectedSources, proxies: proxies, layout: layoutOnly, sourceDims: sourceDims, snapshot: snapshot, probe: probe, camState: camState, layers: layersInfo, version: VERSION };
 })();

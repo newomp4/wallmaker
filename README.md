@@ -38,6 +38,10 @@ Point it at a folder of videos (or select comps right in your project), choose t
 - **Dead screens**: monitors that never come on, with or without the reveal.
 - Deterministic from a seed; the preview plays exactly what AE will do.
 
+**Two view switches** (Build tab, either one on its own)
+- **Layout only** — every cell as one low-opacity shape layer, in exactly the same spots, and the video layers switch off. Animate the camera against it, then flick it back for the render. Verified pixel for pixel: the boxes land on their videos to within a pixel, at the wide shot *and* zoomed in.
+- **Fast preview** — the videos stay on but stop decoding (see below).
+
 **Fast preview**
 - One toggle in the Build tab swaps every source for a **solid proxy of its own exact dimensions**, so AE stops decoding video entirely — the expensive part of a big wall. Flip it back before you render.
 - Nothing about the layers changes: same parenting, transforms, masks, expressions and in/out points. The test suite renders the same frames three ways (real → proxies → real) and asserts the **alpha channel is identical byte for byte**, every screen's evaluated position/scale/opacity is exactly equal, and turning it off reproduces the original frames byte for byte.

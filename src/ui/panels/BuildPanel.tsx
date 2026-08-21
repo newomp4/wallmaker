@@ -4,7 +4,7 @@ import { gridFor } from '../../core/grid'
 import { planScreens, withAnimation } from '../../core/reveal'
 import { buildKeyFor } from '../../core/scene'
 import { isCEP } from '../../ae/cep'
-import { buildInAE, defaultBuildFolder, hostInfoAE, removeBuild, proxies, type AEHostInfo, type ProxyState } from '../../ae/build'
+import { buildInAE, defaultBuildFolder, hostInfoAE, removeBuild, proxies, layoutOnly, type AEHostInfo, type ProxyState, type LayoutState } from '../../ae/build'
 import { Toggle } from '../controls'
 import { setBuildState, useBuildState } from '../buildStore'
 
@@ -13,6 +13,7 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
   const [info, setInfo] = useState<AEHostInfo | null>(null)
   const [infoErr, setInfoErr] = useState('')
   const [prox, setProx] = useState<ProxyState | null>(null)
+  const [lay, setLay] = useState<LayoutState | null>(null)
   const buildKey = buildKeyFor(cfg.compName)
   const { busy, progress, result, error, removed } = useBuildState()
   const grid = gridFor(cfg)
@@ -33,6 +34,9 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
     proxies(buildKey)
       .then((p) => live && setProx(p))
       .catch(() => live && setProx(null))
+    layoutOnly(buildKey)
+      .then((l) => live && setLay(l))
+      .catch(() => live && setLay(null))
     return () => {
       live = false
     }
@@ -41,6 +45,14 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
   const setFast = async (on: boolean) => {
     try {
       setProx(await proxies(buildKey, on))
+    } catch (e) {
+      setBuildState({ error: String(e instanceof Error ? e.message : e) })
+    }
+  }
+
+  const setLayout = async (on: boolean) => {
+    try {
+      setLay(await layoutOnly(buildKey, on))
     } catch (e) {
       setBuildState({ error: String(e instanceof Error ? e.message : e) })
     }
@@ -117,6 +129,16 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
             </div>
             <div className="ptext">{progress.message}</div>
           </div>
+        )}
+        {lay?.found && (
+          <>
+            <Toggle label="Layout only" value={lay.on} onChange={setLayout} />
+            <p className="hint">
+              {lay.on
+                ? `${lay.screens} video layers off; every cell shows as a low-opacity box. Live "Layout opacity (%)" slider on the Controls null.`
+                : 'Every cell as one low-opacity shape layer, in exactly the same spots, and the video layers switch off.'}
+            </p>
+          </>
         )}
         {prox?.found && prox.count > 0 && (
           <>

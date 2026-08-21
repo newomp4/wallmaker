@@ -62,6 +62,7 @@ if 'layers' in result:
         ('wallmaker-camera', 1, 'Camera null'),
         ('wallmaker-screen', n, 'screens'),
         ('wallmaker-bg', 1 if wall['bg']['mode'] != 'transparent' else 0, 'Background'),
+        ('wallmaker-layout', 1, 'Layout guide'),
     ]:
         got = count_pref(pref)
         if got != want:
@@ -70,8 +71,10 @@ if 'layers' in result:
     for pref in ['wallmaker-staticlayer', 'wallmaker-borders', 'wallmaker-scanlines', 'wallmaker-focus', 'wallmaker-label', 'wallmaker-labeltpl']:
         if count_pref(pref):
             fail(f'stale layer {pref} present ({count_pref(pref)})')
-    if len(lays) != n + 2 + (1 if wall['bg']['mode'] != 'transparent' else 0):
-        fail(f'{len(lays)} layers in the comp, expected exactly the rig + screens + background')
+    if len(lays) != n + 3 + (1 if wall['bg']['mode'] != 'transparent' else 0):
+        fail(f'{len(lays)} layers in the comp, expected exactly the rig + screens + layout + background')
+    if any(l['comment'].startswith('wallmaker-layout') and l['enabled'] for l in lays):
+        fail('the layout guide is enabled on a fresh build — it must start off')
     # the centred screen must be findable in AE: named "Center", tagged, and top of the screens
     centred = next((sc for sc in wall['screens'] if sc.get('featured')), None)
     named = [l for l in lays if l['name'].startswith('Center \u00b7')]

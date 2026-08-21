@@ -10,7 +10,7 @@ Usage: python3 test/verify-proxy.py .test-out/G
 """
 import json, sys
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageChops, ImageFilter
 
 d = Path(sys.argv[1])
 wall = json.loads((d / 'wall.json').read_text())
@@ -18,6 +18,8 @@ config = json.loads((d / 'config.json').read_text())
 base = json.loads((d / 'result.json').read_text())
 prox = json.loads((d / 'result-proxy.json').read_text())
 rest = json.loads((d / 'result-restored.json').read_text())
+lay = json.loads((d / 'result-layout.json').read_text())
+layoff = json.loads((d / 'result-layoutoff.json').read_text())
 W, H = wall['frame']['w'], wall['frame']['h']
 bg = tuple(int(config['bgColor'].lstrip('#')[i:i + 2], 16) for i in (0, 2, 4))
 
@@ -110,6 +112,41 @@ for tkey in base['probes']:
         back = sum(1 for x, y in zip(real.tobytes(), res.tobytes()) if x != y)
         fail(f't={tkey}: {back} bytes differ after turning fast preview off')
 print('  restore: turning it off reproduces the original frames byte for byte — ok')
+
+# ---- layout only: the boxes must land on exactly the same pixels as the videos ----
+# Same trick as above: a transparent comp means alpha is pure geometry. The guide is drawn from the
+# grid numbers and a repeater, the screens from per-layer expressions -- completely separate code
+# paths -- so identical coverage is real evidence they agree, not a tautology.
+if not (lay['state']['found'] and lay['state']['on']):
+    fail(f"layout on: {lay['state']}")
+if layoff['state']['on']:
+    fail('layout off: the guide is still showing')
+print(f"  layout: guide on, {lay['state']['screens']} video layers switched off, then back — ok")
+
+for tkey in base['probes']:
+    real = Image.open(d / f'snap-{tkey}.png').convert('RGBA')
+    guide = Image.open(d / f'snap-layout-{tkey}.png').convert('RGBA')
+    back = Image.open(d / f'snap-layoutoff-{tkey}.png').convert('RGBA')
+    # Compare the two coverage masks with a ONE PIXEL tolerance: the guide is a shape-layer
+    # rectangle and a screen is a masked footage layer, so their shared edges antialias slightly
+    # differently. A box that had actually moved would fail this by its whole offset.
+    solid = lambda im: im.getchannel('A').point(lambda v: 255 if v else 0)
+    ma, mb = solid(real), solid(guide)
+    outside = ImageChops.subtract(ma, mb.filter(ImageFilter.MaxFilter(3)))  # video where no box
+    missing = ImageChops.subtract(mb.filter(ImageFilter.MinFilter(3)), ma)  # box where no video
+    diff = sum(outside.point(lambda v: 1 if v else 0).getdata()) + sum(missing.point(lambda v: 1 if v else 0).getdata())
+    covered = sum(ma.point(lambda v: 1 if v else 0).getdata())
+    if diff:
+        fail(f't={tkey}: the layout guide and the videos disagree on {diff} px by more than a pixel')
+    else:
+        print(f'  layout t={tkey}: {covered} covered px, every box lands on its video to the pixel — ok')
+    # the guide must be a faint wash, not a solid block
+    alphas = [v for v in guide.getchannel('A').getdata() if v]
+    if alphas and (sum(alphas) / len(alphas)) > 160:
+        fail(f't={tkey}: the layout guide is not low-opacity (mean alpha {sum(alphas) / len(alphas):.0f})')
+    if real.tobytes() != back.tobytes():
+        fail(f't={tkey}: turning layout off did not restore the frame exactly')
+print('  layout: switching back restores the videos frame for frame — ok')
 
 if failures:
     print(f'\n✗ {len(failures)} proxy failure(s)')

@@ -87,9 +87,13 @@ const ROUNDS = {
       randomStart: true, loop: true, muteAudio: true,
       // transparent so the proxy check can compare the ALPHA channel: pure coverage, no colour
       background: 'transparent', bgColor: '#0a0a0c',
+      featured: 7, // the centred screen is the COMP source -- Owen's actual setup
+      // a live camera move, so the view switches are exercised against a non-identity camera scale
+      intro: 'zoomOut', introHold: 0.8, introDur: 1.6, outro: 'none',
       animate: false, reveal: 'random', revealStart: 0, revealDuration: 0,
       screenAnim: 'cut', screenAnimFrames: 1, jitter: 0, deadPct: 0, seed: 4,
     },
+    compSource: { name: 'WM comp source', hex: '2ECC71' },
     times: [0.3, 3.0, 6.5],
     extraColors: { [LONG_NAME]: JSON.parse(readFileSync(join(assets, 'colors.json'), 'utf8'))['clip-01.mp4'] },
     proxy: true, // also verifies fast preview: identical geometry, identical restore
@@ -162,12 +166,14 @@ for (const key of runs) {
     // solid proxies, real footage again -- in separate DoScript passes so a queued saveFrameToPng
     // can never straddle a proxy toggle, then compare geometry and pixels.
     for (const pass of [
-      { tag: 'proxy', on: true },
-      { tag: 'restored', on: false },
+      { tag: 'proxy', fn: 'proxies', on: true },
+      { tag: 'restored', fn: 'proxies', on: false },
+      { tag: 'layout', fn: 'layout', on: true },
+      { tag: 'layoutoff', fn: 'layout', on: false },
     ]) {
       const rp = join(dir, `runner-${pass.tag}.jsx`)
       rmSync(join(dir, `result-${pass.tag}.json`), { force: true })
-      writeFileSync(rp, makeProxyRunner({ dir, compName: wall.compName, buildKey: wall.buildKey, times: round.times, ...pass }))
+      writeFileSync(rp, makeTogglePass({ dir, compName: wall.compName, buildKey: wall.buildKey, times: round.times, ...pass }))
       execSync(`osascript -e 'with timeout of 600 seconds' -e 'tell application "${AE}" to DoScript "$.evalFile(\\"${rp}\\")"' -e 'end timeout'`, { stdio: 'inherit' })
       await waitFor(() => existsSync(join(dir, `result-${pass.tag}.json`)), 120000, `result-${pass.tag}.json`)
       const pr = JSON.parse(readFileSync(join(dir, `result-${pass.tag}.json`), 'utf8'))
@@ -232,8 +238,8 @@ ${snaps}
 `
 }
 
-/** A pass that flips fast preview and re-renders the same frames. */
-function makeProxyRunner({ dir, compName, buildKey, times, tag, on }) {
+/** A pass that flips a view switch (fast preview / layout only) and re-renders the same frames. */
+function makeTogglePass({ dir, compName, buildKey, times, tag, fn, on }) {
   const j = (v) => JSON.stringify(JSON.stringify(v))
   let body = ''
   for (const t of times) {
@@ -245,7 +251,7 @@ function makeProxyRunner({ dir, compName, buildKey, times, tag, on }) {
 $.evalFile(${JSON.stringify(join(root, 'cep/host/index.jsx'))});
 function WRITE(name, s) { var f = new File(${JSON.stringify(dir)} + '/' + name); f.encoding = 'UTF-8'; f.open('w'); f.write(s); f.close(); }
 try {
-  var state = WALLMAKER_JSON.parse(WALLMAKER.proxies(${j({ buildKey, on })}));
+  var state = WALLMAKER_JSON.parse(WALLMAKER.${fn}(${j({ buildKey, on })}));
   var probes = {};
   var srcs = {};
 ${body}  WRITE('result-${tag}.json', WALLMAKER_JSON.stringify({ ok: true, state: state, probes: probes, srcs: srcs }));

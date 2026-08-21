@@ -103,6 +103,17 @@ export function proxies(buildKey: string, on?: boolean): Promise<ProxyState> {
   return callHost<ProxyState>('proxies', on === undefined ? { buildKey } : { buildKey, on })
 }
 
+export interface LayoutState {
+  found: boolean
+  on: boolean
+  screens: number
+}
+
+/** Layout only: show the low-opacity cell boxes and switch the video layers off (or back). */
+export function layoutOnly(buildKey: string, on?: boolean): Promise<LayoutState> {
+  return callHost<LayoutState>('layout', on === undefined ? { buildKey } : { buildKey, on })
+}
+
 export function defaultBuildFolder(info: AEHostInfo | null, buildKey: string): string {
   const base = info?.projectDir ? posixPath(info.projectDir) + '/Wallmaker' : posixPath(systemPath('myDocuments')) + '/Wallmaker'
   return `${base}/${buildKey}`

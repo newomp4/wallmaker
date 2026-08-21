@@ -95,6 +95,20 @@ The centred screen is deliberately findable in AE: named `Center · <source>`, c
 `wallmaker-screen <i> center`, label colour 9, and lifted to the top of the screen stack by
 `finish()`. `verify.py` asserts all four (and that nothing else wears the colour).
 
+## The two view switches
+
+`WALLMAKER.layout({buildKey, on})` enables the `Wallmaker Layout` shape layer (all cells as one
+repeater-driven rectangle grid, drawn from the same numbers and the same live `Gap (px)` slider as
+the screens) and disables every screen layer. `WALLMAKER.proxies` is independent; either works alone.
+The state is remembered in the Controls null's record (`__layout`) so a rebuild comes back the way
+you were working.
+
+**AE rewrites a child's transform when you parent it**, to preserve its world transform — and the
+camera's Scale is an *expression* that may evaluate to 900% at the current time. Set position AND
+scale AFTER `layer.parent = …` or the child inherits the inverse of the zoom. This bit the Controls
+null once and the layout layer once; round G now carries a camera move so the alignment check runs
+against a non-identity camera scale and would catch it a third time.
+
 ## Fast preview (proxies)
 
 `WALLMAKER.proxies({buildKey, on})` gives every source an `AVItem.setProxyWithSolid(color, name,
@@ -111,6 +125,8 @@ independent of colour — and require it identical to the byte, plus exact equal
 evaluated position/scale/opacity and a byte-for-byte restore.
 
 Reply keys must never be called `error`: `callHost` throws on any reply carrying one.
+`setProxyWithSolid`'s *name* is capped at **31 bytes** — a real filename blows it, and every source
+refuses. Round G's sources include a 57-character filename so the limit is actually exercised.
 
 ## Testing
 
