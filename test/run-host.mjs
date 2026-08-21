@@ -8,7 +8,7 @@
  * Usage: node test/run-host.mjs [A] [B]   (default: both rounds)
  */
 import { execFileSync, execSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -20,6 +20,12 @@ const AE = 'Adobe After Effects 2025'
 if (!existsSync(join(assets, 'colors.json'))) execFileSync('node', [join(root, 'scripts/make-test-videos.mjs')], { stdio: 'inherit' })
 
 const clips = (n) => Array.from({ length: n }, (_, i) => join(assets, `clip-${String(i + 1).padStart(2, '0')}.mp4`))
+
+// A deliberately long filename. AE caps a solid proxy's name at 31 BYTES, so fast preview has to
+// truncate -- with short test names that limit was never reached and the bug shipped.
+const LONG_NAME = 'a-very-long-source-filename-that-would-blow-the-limit.mp4'
+const LONG_CLIP = join(assets, LONG_NAME)
+if (!existsSync(LONG_CLIP)) copyFileSync(join(assets, 'clip-01.mp4'), LONG_CLIP)
 
 const ROUNDS = {
   A: {
@@ -72,7 +78,7 @@ const ROUNDS = {
   G: {
     // 'cover': 9:16 cells keep their exact shape and the outer screens run off the comp edges
     cfg: {
-      videos: clips(8),
+      videos: [...clips(7), LONG_CLIP],
       compName: 'Wallmaker test G',
       compW: 1920, compH: 1080, fps: 30, durationSec: 8,
       gridMode: 'manual', rows: 3, cols: 9, gap: 8, margin: 0,
@@ -85,6 +91,7 @@ const ROUNDS = {
       screenAnim: 'cut', screenAnimFrames: 1, jitter: 0, deadPct: 0, seed: 4,
     },
     times: [0.3, 3.0, 6.5],
+    extraColors: { [LONG_NAME]: JSON.parse(readFileSync(join(assets, 'colors.json'), 'utf8'))['clip-01.mp4'] },
     proxy: true, // also verifies fast preview: identical geometry, identical restore
   },
   F: {
@@ -127,7 +134,8 @@ for (const key of runs) {
   execFileSync('npx', ['tsx', join(root, 'test/make-scene.ts'), cfgPath, wallPath], { stdio: 'inherit', cwd: root })
   const wall = JSON.parse(readFileSync(wallPath, 'utf8'))
 
-  if (round.compSource) writeFileSync(join(dir, 'extra-colors.json'), JSON.stringify({ [round.compSource.name]: round.compSource.hex }))
+  const extra = { ...(round.extraColors ?? {}), ...(round.compSource ? { [round.compSource.name]: round.compSource.hex } : {}) }
+  if (Object.keys(extra).length) writeFileSync(join(dir, 'extra-colors.json'), JSON.stringify(extra))
   const runner = makeRunner({ wallPath, dir, compName: wall.compName, times: round.times, compSource: round.compSource })
   const runnerPath = join(dir, 'runner.jsx')
   writeFileSync(runnerPath, runner)

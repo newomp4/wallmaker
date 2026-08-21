@@ -913,6 +913,12 @@ $.global.WALLMAKER = (function () {
 
   // ---------------------------------------------------------------- fast preview (proxies)
 
+  /** AE caps a solid's name at 31 BYTES, so a long filename cannot go in whole. ASCII + truncate. */
+  function proxyName(nm) {
+    var out = 'WM ' + String(nm).replace(/[^\x20-\x7E]/g, '');
+    return out.length > 30 ? out.substring(0, 30) : out;
+  }
+
   /** A stable mid-grey per source, so a proxied wall still reads as a grid of distinct screens. */
   function greyFor(name) {
     var h = 2166136261;
@@ -972,7 +978,7 @@ $.global.WALLMAKER = (function () {
                 var g = greyFor(it.name);
                 // the proxy MUST match the source's dimensions or every layer's scale would mean
                 // something different and the wall would shift
-                it.setProxyWithSolid([g, g, g], 'WM preview ' + it.name, Math.max(2, it.width), Math.max(2, it.height), it.pixelAspect);
+                it.setProxyWithSolid([g, g, g], proxyName(it.name), Math.max(2, it.width), Math.max(2, it.height), it.pixelAspect);
               }
               it.useProxy = true;
             } else {
