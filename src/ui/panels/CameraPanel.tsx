@@ -3,8 +3,12 @@ import { gridFor } from '../../core/grid'
 import { planScreens, planCamera, withAnimation } from '../../core/reveal'
 import { NumberInput, Row, Section, Select, Toggle } from '../controls'
 
+const basename = (p: string) => p.slice(p.lastIndexOf('/') + 1)
+
 export function CameraPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Config>) => void }) {
   const grid = gridFor(cfg)
+  const centreName =
+    cfg.featured >= 0 ? (cfg.featured < cfg.videos.length ? basename(cfg.videos[cfg.featured]) : (cfg.comps[cfg.featured - cfg.videos.length]?.name ?? '')) : ''
   const cam = planCamera(cfg, grid, planScreens(withAnimation(cfg), grid))
   const keys = cam
     ? [
@@ -27,7 +31,7 @@ export function CameraPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Co
         />
         <p className="hint">
           {cfg.featured >= 0
-            ? `Dead centre of the ${grid.rows}×${grid.cols} grid, always on. Click any screen in the preview to swap it.`
+            ? `Dead centre of the ${grid.rows}×${grid.cols} grid, always on — the AE layer “Center · ${centreName}”. Click any screen in the preview to swap it.`
             : 'The camera zooms to the middle cell. Pick one here, or click a screen in the preview.'}
         </p>
       </Section>

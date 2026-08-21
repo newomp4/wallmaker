@@ -91,6 +91,10 @@ Never build a string with `+ someArray/Error` — `String(x)` first. If you ever
 exactly ONE scripted TextDocument write per build (AE leaks undo objects per set — duplicate a
 template and drive the copies with a `sourceText` *expression*).
 
+The centred screen is deliberately findable in AE: named `Center · <source>`, comment
+`wallmaker-screen <i> center`, label colour 9, and lifted to the top of the screen stack by
+`finish()`. `verify.py` asserts all four (and that nothing else wears the colour).
+
 ## Fast preview (proxies)
 
 `WALLMAKER.proxies({buildKey, on})` gives every source an `AVItem.setProxyWithSolid(color, name,

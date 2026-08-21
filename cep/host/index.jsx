@@ -650,8 +650,18 @@ $.global.WALLMAKER = (function () {
       st.skipped.push(vid.name + ' (' + String(eAdd && eAdd.message ? eAdd.message : eAdd) + ')');
       return;
     }
-    layer.name = 'Screen ' + pad3(idx + 1, st.padWidth) + ' \u00b7 ' + vid.name;
-    layer.comment = TAG + '-screen ' + idx;
+    // The centred screen is findable in AE: it is named "Center", carries a label colour, and
+    // finish() lifts it to the top of the screens -- so you can spot it in the timeline, type
+    // "Center" in the search box, or just look at the layer right under the rig.
+    var isCentre = !!s.featured;
+    layer.name = (isCentre ? 'Center' : 'Screen ' + pad3(idx + 1, st.padWidth)) + ' \u00b7 ' + vid.name;
+    layer.comment = TAG + '-screen ' + idx + (isCentre ? ' center' : '');
+    if (isCentre) {
+      st.centreLayer = layer;
+      try {
+        layer.label = 9; // green: one coloured layer among the plain ones
+      } catch (eLbl) {}
+    }
 
     // timing: random start point inside the SOURCE (not the looped span), then hold the comp span
     var off = 0;
@@ -751,6 +761,7 @@ $.global.WALLMAKER = (function () {
         main: null,
         ctl: null,
         cam: null,
+        centreLayer: null,
         bgLayer: null,
         ctlRec: null,
         camRec: null,
@@ -846,8 +857,9 @@ $.global.WALLMAKER = (function () {
     }
     app.beginUndoGroup('Wallmaker: build (finish)');
     try {
-      // bottom to top: Background, screens, Controls, Camera
+      // bottom to top: Background, screens, the centred screen, Controls, Camera
       if (st.bgLayer) st.bgLayer.moveToEnd();
+      if (st.centreLayer) st.centreLayer.moveToBeginning();
       if (st.ctl) st.ctl.moveToBeginning();
       if (st.cam) st.cam.moveToBeginning();
       // drop footage that no build uses any more (e.g. a rebuild with a different set of videos)
@@ -1101,7 +1113,7 @@ $.global.WALLMAKER = (function () {
     var out = [];
     for (var i = 1; i <= comp.numLayers; i++) {
       var l = comp.layer(i);
-      out.push({ name: l.name, comment: String(l.comment || ''), enabled: l.enabled });
+      out.push({ name: l.name, comment: String(l.comment || ''), enabled: l.enabled, label: l.label });
     }
     return reply(out);
   }

@@ -71,6 +71,28 @@ if 'layers' in result:
             fail(f'stale layer {pref} present ({count_pref(pref)})')
     if len(lays) != n + 2 + (1 if wall['bg']['mode'] != 'transparent' else 0):
         fail(f'{len(lays)} layers in the comp, expected exactly the rig + screens + background')
+    # the centred screen must be findable in AE: named "Center", tagged, and top of the screens
+    centred = next((sc for sc in wall['screens'] if sc.get('featured')), None)
+    named = [l for l in lays if l['name'].startswith('Center \u00b7')]
+    tagged = [l for l in lays if l['comment'].endswith(' center')]
+    if centred is None:
+        if named or tagged:
+            fail(f'no centred screen planned, but {len(named)} layer(s) are named Center')
+    elif len(named) != 1 or len(tagged) != 1 or named[0]['comment'] != tagged[0]['comment']:
+        fail(f'expected exactly one layer named/tagged Center, got {len(named)} named and {len(tagged)} tagged')
+    else:
+        want = wall['videos'][centred['v']]['name']
+        if not named[0]['name'].endswith(want):
+            fail(f'the Center layer plays {named[0]["name"]!r}, expected {want!r}')
+        screens_from_top = [i for i, l in enumerate(lays) if l['comment'].startswith('wallmaker-screen')]
+        if lays.index(named[0]) != screens_from_top[0]:
+            fail('the Center layer is not the topmost screen')
+        elif named[0].get('label') != 9:
+            fail(f'the Center layer has label {named[0].get("label")}, expected the flagged colour 9')
+        elif any(l.get('label') == 9 for l in lays if l is not named[0] and l['comment'].startswith('wallmaker-screen')):
+            fail('another screen shares the Center label colour')
+        else:
+            print(f'  centre: “{named[0]["name"]}” is the topmost screen, tagged and colour-flagged — ok')
     print(f'  structure: {len(lays)} layers match the plan — ok')
 
 # ---------- 'cover': the wall runs past the comp edges, and every source is still seen ----------
