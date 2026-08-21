@@ -114,6 +114,42 @@ $.global.WALLMAKER = (function () {
     }
     item.remove();
   }
+  /**
+   * AE re-renders whatever comp is open in the viewer on EVERY layer change, so building into a
+   * comp that is already on screen is O(n^2): at 1085 screens a rebuild took 141s, with the batches
+   * growing from 1.8s to 19s. Park the viewer on a throwaway comp while we work and it is 8s flat.
+   */
+  function parkViewer() {
+    try {
+      var sc = app.project.items.addComp('Wallmaker (working)', 8, 8, 1, 1, 30);
+      sc.comment = TAG + '-scratch';
+      sc.openInViewer();
+      return sc;
+    } catch (e) {
+      return null;
+    }
+  }
+  function unparkViewer(sc, comp) {
+    try {
+      if (comp) comp.openInViewer();
+    } catch (e) {}
+    try {
+      if (sc) sc.remove();
+    } catch (e2) {}
+  }
+  /** Drop any working comp a previous run left behind (a build that threw before finish()). */
+  function dropStaleScratch() {
+    var items = app.project.items;
+    for (var i = items.length; i >= 1; i--) {
+      var it = items[i];
+      if (it instanceof CompItem && it.comment === TAG + '-scratch') {
+        try {
+          it.remove();
+        } catch (e) {}
+      }
+    }
+  }
+
   function findCompByName(name) {
     var items = app.project.items;
     for (var i = 1; i <= items.length; i++) if (items[i] instanceof CompItem && items[i].name === name) return items[i];
@@ -587,8 +623,11 @@ $.global.WALLMAKER = (function () {
         if (it.mainSource.loop > 1) {
           srcDur = srcDur / it.mainSource.loop; // reused from a previous build: duration is already multiplied
         }
-        // set the loop we need now -- and RESET a stale loop when looping is off this build
-        it.mainSource.loop = st.data.loop ? Math.max(1, Math.min(9999, Math.ceil((st.data.durationSec + srcDur) / srcDur) + 1)) : 1;
+        // set the loop we need now -- and RESET a stale loop when looping is off this build.
+        // Only WRITE it when it differs: re-interpreting footage costs ~30ms an item even when the
+        // value is unchanged, which was 4s of every rebuild for a 130-clip wall.
+        var want = st.data.loop ? Math.max(1, Math.min(9999, Math.ceil((st.data.durationSec + srcDur) / srcDur) + 1)) : 1;
+        if (it.mainSource.loop !== want) it.mainSource.loop = want;
       } catch (e) {}
     }
     var rec = { item: it, srcDur: srcDur };
@@ -630,6 +669,7 @@ $.global.WALLMAKER = (function () {
     var rec;
     try {
       rec = vid.compId ? sourceComp(vid) : importVideo(vid.path);
+      if (!rec.isComp && rec.item.footageMissing) throw new Error('footage is offline');
       if (!rec.isComp && !rec.item.hasVideo) throw new Error('no video track');
     } catch (e) {
       st.skipped.push(vid.name + ' (' + String(e && e.message ? e.message : e) + ')');
@@ -654,6 +694,12 @@ $.global.WALLMAKER = (function () {
       layer = st.main.layers.add(it); // can throw on circular comp nesting -- that source is skipped, not the build
     } catch (eAdd) {
       st.skipped.push(vid.name + ' (' + String(eAdd && eAdd.message ? eAdd.message : eAdd) + ')');
+      return;
+    }
+    // AE hands back nothing (rather than throwing) for some unusable items -- offline footage, a
+    // placeholder. One of those used to take the whole build down on the next line.
+    if (!layer) {
+      st.skipped.push(vid.name + ' (After Effects would not add it)');
       return;
     }
     // The centred screen is findable in AE: it is named "Center", carries a label colour, and
@@ -805,6 +851,9 @@ $.global.WALLMAKER = (function () {
     if (!mat) return reply({ found: false, on: false, screens: screens.length });
     if (typeof a.on === 'boolean') {
       app.beginUndoGroup('Wallmaker: layout ' + (a.on ? 'on' : 'off'));
+      // same story as the build: on a big wall the viewer re-render dominates. Below ~200 screens
+      // it is imperceptible either way, so don't make small walls blink for nothing.
+      var park = screens.length > 200 ? parkViewer() : null;
       try {
         mat.enabled = a.on;
         for (var m = 0; m < screens.length; m++) {
@@ -819,6 +868,7 @@ $.global.WALLMAKER = (function () {
           setRec(ctl, rec);
         }
       } finally {
+        if (park) unparkViewer(park, comp);
         app.endUndoGroup();
       }
     }
@@ -870,6 +920,7 @@ $.global.WALLMAKER = (function () {
         ctl: null,
         cam: null,
         centreLayer: null,
+        scratch: null,
         bgLayer: null,
         layoutLayer: null,
         ctlRec: null,
@@ -877,6 +928,8 @@ $.global.WALLMAKER = (function () {
         keptCamKeys: false,
         padWidth: String(data.screens.length).length > 2 ? String(data.screens.length).length : 2
       };
+      dropStaleScratch();
+      st.scratch = parkViewer();
       // refuse a foreign comp-name clash BEFORE creating anything (no orphan folders on error)
       var preExisting = null;
       var itemsPre = app.project.items;
@@ -962,7 +1015,9 @@ $.global.WALLMAKER = (function () {
 
   function finish() {
     if (!st || !st.main) {
+      if (st) unparkViewer(st.scratch, null);
       st = null;
+      dropStaleScratch();
       return reply({ compName: '', screens: 0, videos: 0, skipped: [] });
     }
     app.beginUndoGroup('Wallmaker: build (finish)');
@@ -1003,9 +1058,7 @@ $.global.WALLMAKER = (function () {
       }
       var videos = 0;
       for (var k in st.footage) if (st.footage.hasOwnProperty(k)) videos++;
-      try {
-        st.main.openInViewer();
-      } catch (e2) {}
+      unparkViewer(st.scratch, st.main);
       var out = { compName: st.main.name, screens: st.built, videos: videos, skipped: st.skipped, keptCamKeys: !!st.keptCamKeys };
       st = null;
       return reply(out);

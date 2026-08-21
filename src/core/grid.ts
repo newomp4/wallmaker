@@ -163,10 +163,11 @@ export function fillGrid(cfg: Config): Partial<Config> {
   const g = gridFor(cfg)
   const aspect = aspectOf(cfg)
   const want = Math.max(1, cfg.gridMode === 'manual' ? cfg.rows * cfg.cols : cfg.videos.length + cfg.comps.length || g.rows * g.cols)
-  // a camera target forces odd counts (see gridFor), so only odd grids can actually stay flush
-  const centred = needsOddGrid(cfg)
-  const step = centred ? 2 : 1
-  const from = centred ? 1 : 1
+  // Any camera target forces a centre. With 'grid' centring only odd counts survive gridFor, and
+  // with 'shift' centring an even count moves the wall half a cell -- which puts the bands straight
+  // back. Either way, "reach the edges" is only achievable on an odd grid.
+  const step = hasCameraTarget(cfg) ? 2 : 1
+  const from = 1
 
   if (aspect !== null) {
     let best: { rows: number; cols: number; gap: number } | null = null

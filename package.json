@@ -16,6 +16,9 @@
     "test:videos": "node scripts/make-test-videos.mjs",
     "test:host": "node test/run-host.mjs",
     "test:rebuild": "node test/run-rebuild.mjs",
+    "test:robust": "node test/run-robust.mjs",
+    "test:fuzz": "tsx test/fuzz.ts 12000",
+    "test:perf": "tsx test/perf.ts",
     "test:panel": "node test/run-panel.mjs"
   },
   "dependencies": {

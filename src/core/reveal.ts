@@ -190,7 +190,9 @@ export function planCamera(cfg: Config, grid: GridSpec, screens: ScreenSpec[]): 
   if (cfg.outro === 'zoomIn') {
     const end = Math.min(Math.max(introEnd + 0.2, D - Math.max(0, cfg.outroHold)), D)
     const start = Math.max(introEnd + 0.1, end - Math.max(0.1, cfg.outroDur))
-    if (start < D) outro = { start: r2(start), end: r2(end) }
+    // a zero-length move would mean two keyframes on the same frame in AE: drop it instead, the
+    // comp simply has no room left for a push-in after the intro
+    if (end - start >= 0.05) outro = { start: r2(start), end: r2(end) }
   }
   // where the target sits relative to the COMP centre: its cell offset plus however far the wall
   // itself is nudged, so a shifted wall reports 0 and the camera simply stays put

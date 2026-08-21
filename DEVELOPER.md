@@ -109,6 +109,27 @@ scale AFTER `layer.parent = …` or the child inherits the inverse of the zoom. 
 null once and the layout layer once; round G now carries a camera move so the alignment check runs
 against a non-identity camera scale and would catch it a third time.
 
+## Performance
+
+The viewer is the thing to watch. **AE re-renders whatever comp is open in the viewer on every
+layer change**, so building into a comp that is already on screen is O(n²) — at 1085 screens a
+rebuild took 141s with the step batches growing from 1.8s to 19s. `begin()` parks the viewer on a
+throwaway `wallmaker-scratch` comp and `finish()` puts the real one back: **9.4s, batches flat**.
+The layout toggle does the same above 200 screens (7.1s → 0.42s). Numbers at 1085 screens / 130
+sources, measured, not guessed:
+
+| | before | after |
+|---|---|---|
+| build | 9.2s | 10.1s |
+| rebuild | 161s | 9.4s |
+| layout on / off | 7.1s / 8.7s | 0.42s / 0.73s |
+| fast preview on / off | 1.1s / 0.02s | 1.1s / 0.19s |
+
+Also: `mainSource.loop` costs ~30ms an item **even when you write the value it already has**, which
+was 4s of every rebuild — only write it when it differs. And the panel's own math is not the
+bottleneck (`npm run test:perf`: 1.4ms to replan 4096 cells); the preview holds a flat 33ms frame
+at 4096 cells with a camera move and 130 thumbnails loading.
+
 ## Fast preview (proxies)
 
 `WALLMAKER.proxies({buildKey, on})` gives every source an `AVItem.setProxyWithSolid(color, name,
@@ -132,9 +153,12 @@ refuses. Round G's sources include a 57-character filename so the limit is actua
 
 ```bash
 npm run test:unit     # pure-core unit tests (plan determinism, grid/camera math, thresholds)
+npm run test:fuzz     # 12k random configs against the shared-core invariants
+npm run test:perf     # how long the shared math takes at 25 → 4096 cells
 npm run test:videos   # ffmpeg: 12 solid-color clips + 2 patterned, .test-assets/
 npm run test:host     # rounds A+B+D+F+G — ⚠ closes the current AE project without saving
 npm run test:rebuild  # round E (rebuild-in-place / remove lifecycle) — same warning
+npm run test:robust   # round H (offline sources, a damaged rig, a name clash) — same warning
 npm run test:panel    # round C — needs the panel installed & open (npm run cep:install, restart AE)
 ```
 
