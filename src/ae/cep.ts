@@ -52,7 +52,10 @@ export function hostInfo(): { app: string; version: string } | null {
 
 /** JSON that is safe to embed in ExtendScript source / eval (U+2028/2029 are line terminators there). */
 export function jsonForES3(v: unknown): string {
-  return JSON.stringify(v).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
+  // EVERY non-ASCII character becomes a \uXXXX escape. Raw UTF-8 is not safe: ExtendScript's UTF-8
+  // reader silently DROPS zero-width joiners (U+200D), so a file called "…❤️‍🩹….mp4" arrives with
+  // one character missing and the build reports it as a missing video. Escapes round-trip exactly.
+  return JSON.stringify(v).replace(/[^\x20-\x7E]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'))
 }
 
 /** Runs ExtendScript in the host and resolves with its string result. */

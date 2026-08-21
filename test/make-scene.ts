@@ -2,6 +2,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { DEFAULT_CONFIG } from '../src/core/defaults.ts'
 import { compileWall } from '../src/core/scene.ts'
+import { jsonForES3 } from '../src/ae/cep.ts'
 import type { Config } from '../src/core/types.ts'
 
 const [cfgPath, outPath] = process.argv.slice(2)
@@ -11,5 +12,6 @@ if (!cfgPath || !outPath) {
 }
 const overrides = JSON.parse(readFileSync(cfgPath, 'utf8')) as Partial<Config>
 const cfg: Config = { ...DEFAULT_CONFIG, ...overrides }
-writeFileSync(outPath, JSON.stringify(compileWall(cfg)))
+// the same escaping the panel uses, so the tests exercise the real bytes the host reads
+writeFileSync(outPath, jsonForES3(compileWall(cfg)))
 console.log(`wrote ${outPath}`)

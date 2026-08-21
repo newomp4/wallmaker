@@ -20,10 +20,13 @@ if (!existsSync(join(assets, 'colors.json'))) execFileSync('node', [join(root, '
 rmSync(dir, { recursive: true, force: true })
 mkdirSync(join(dir, 'clips'), { recursive: true })
 
-// our own copies, so one of them can be taken away mid-test
+// our own copies, so one of them can be taken away mid-test — and one named the way real footage
+// is named. The ZWJ (U+200D) inside that emoji sequence is the point: ExtendScript's UTF-8 file
+// reader DROPS it, so a raw-UTF-8 wall.json used to hand the host a path that does not exist.
 const OFFLINE = 'goes-offline.mp4'
+const ZWJ = 'clip \u2764\ufe0f\u200d\ud83e\ude79 \ud83d\ude2d emoji [7663203245891800342].mp4'
 const clips = Array.from({ length: 6 }, (_, i) => {
-  const name = i === 3 ? OFFLINE : `keep-${i}.mp4`
+  const name = i === 3 ? OFFLINE : i === 5 ? ZWJ : `keep-${i}.mp4`
   const to = join(dir, 'clips', name)
   copyFileSync(join(assets, `clip-0${i + 1}.mp4`), to)
   return to
@@ -66,6 +69,7 @@ try {
   r.layNone = WALLMAKER_JSON.parse(WALLMAKER.layout(WALLMAKER_JSON.stringify({ buildKey: key, on: true })));
   r.fin1 = BUILD();
   var c = findComp('Wallmaker test H');
+  r.zwjName = (function () { for (var i = 1; i <= c.numLayers; i++) { var l = c.layer(i); if (l.name.indexOf('emoji') > 0) return l.name; } return null; })();
   byName(c, 'Wallmaker Camera').remove();
   r.fin2 = BUILD(); c = findComp('Wallmaker test H');
   r.camRebuilt = tagged(c, 'wallmaker-camera');
@@ -105,7 +109,8 @@ if (!r.ok) throw new Error(`Round H failed in AE: ${r.error}`)
 const n = wall.screens.length
 const checks = [
   ['switches report "no build" instead of throwing', r.proxNone.found === false && r.layNone.found === false],
-  [`first build: ${n} screens`, r.fin1.screens === n],
+  [`first build: ${n} screens, nothing skipped`, r.fin1.screens === n && r.fin1.skipped.length === 0, JSON.stringify(r.fin1.skipped)],
+  ['a filename with a ZWJ emoji sequence survives the trip to the host', !!r.zwjName && r.zwjName.indexOf('\u200d') > 0, String(r.zwjName)],
   ['a deleted Camera null is rebuilt and re-parented', r.camRebuilt === 1 && r.ctlParent === 'Wallmaker Camera'],
   ['a renamed Controls null is found by tag, not name, and keeps its name', r.ctlKept === 1 && r.ctlName === 'My wall null'],
   ['toggling a deleted Layout guide reports "not found"', r.layMissing.found === false],
