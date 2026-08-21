@@ -23,6 +23,7 @@ rv = wall['reveal']
 n = len(wall['screens'])
 fps = wall['fps']
 W, H = wall['frame']['w'], wall['frame']['h']
+OX, OY = wall.get('wallOffset', [0, 0])  # 'shift' centring moves the whole wall off the comp centre
 anim_len = rv['animFrames'] / fps
 EPS = anim_len + 2.5 / fps + 0.05  # skip screens mid-transition (+ frame quantization slack)
 
@@ -97,8 +98,8 @@ if 'layers' in result:
 
 # ---------- 'cover': the wall runs past the comp edges, and every source is still seen ----------
 def onscreen(sc):
-    cx = (sc['col'] - (g['cols'] - 1) / 2) * (g['cellW'] + g['gap'])
-    cy = (sc['row'] - (g['rows'] - 1) / 2) * (g['cellH'] + g['gap'])
+    cx = (sc['col'] - (g['cols'] - 1) / 2) * (g['cellW'] + g['gap']) + OX
+    cy = (sc['row'] - (g['rows'] - 1) / 2) * (g['cellH'] + g['gap']) + OY
     return abs(cx) + g['cellW'] / 2 <= W / 2 + 0.5 and abs(cy) + g['cellH'] / 2 <= H / 2 + 0.5
 
 VISIBLE = [sc for sc in wall['screens'] if onscreen(sc)]
@@ -202,8 +203,10 @@ if 'cams' in result:
     first = result['cams'][sorted(result['cams'], key=float)[0]]
     if first.get('ctlParent') != 'Wallmaker Camera':
         fail(f'the Controls null is parented to {first.get("ctlParent")!r}, expected the camera null')
-    if first.get('ctlPos') and (abs(first['ctlPos'][0]) > 0.01 or abs(first['ctlPos'][1]) > 0.01):
-        fail(f'the wall null sits at {first["ctlPos"]}, expected the camera origin [0, 0]')
+    if first.get('ctlPos') and (abs(first['ctlPos'][0] - OX) > 0.02 or abs(first['ctlPos'][1] - OY) > 0.02):
+        fail(f'the wall null sits at {first["ctlPos"][:2]}, expected the camera origin + shift [{OX}, {OY}]')
+    elif OX or OY:
+        print(f'  shift: the wall null is nudged {OX}, {OY} px so a cell lands dead centre — ok')
     # the keyframes on 'Zoom to screen (%)' must be exactly the plan's move
     want_keys = []
     if has_move:
@@ -266,8 +269,8 @@ for tkey, probe in result['probes'].items():
             fail(f'snap t={t}: margin band rgb {got}, expected bg {bg}')
     checked = 0
     for s in VISIBLE:
-        cx = W / 2 + (s['col'] - (g['cols'] - 1) / 2) * (g['cellW'] + g['gap'])
-        cy = H / 2 + (s['row'] - (g['rows'] - 1) / 2) * (g['cellH'] + g['gap'])
+        cx = W / 2 + (s['col'] - (g['cols'] - 1) / 2) * (g['cellW'] + g['gap']) + OX
+        cy = H / 2 + (s['row'] - (g['rows'] - 1) / 2) * (g['cellH'] + g['gap']) + OY
         mean = ImageStat.Stat(img.crop((int(cx) - 3, int(cy) - 3, int(cx) + 4, int(cy) + 4))).mean
         op = op_by_idx[s['i']]
         on_time = rv['start'] + s['th'] / 100 * rv['duration']
@@ -295,8 +298,8 @@ for tkey, probe in result['probes'].items():
             pos = pos_by_idx[s['i']]
             if op_by_idx[s['i']] < 99.5 or name not in colors:
                 continue
-            cx_ = W / 2 + pos[0]
-            cy_ = H / 2 + pos[1]
+            cx_ = W / 2 + pos[0] + OX
+            cy_ = H / 2 + pos[1] + OY
             got = img.getpixel((int(cx_ - g['cellW'] / 2 + 3), int(cy_ - g['cellH'] / 2 + 3)))
             want = hex_rgb(colors[name])
             if all(abs(gc - wc) <= 60 for gc, wc in zip(got, want)):

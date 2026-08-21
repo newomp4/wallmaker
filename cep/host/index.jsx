@@ -387,6 +387,7 @@ $.global.WALLMAKER = (function () {
     var W = d.frame.w;
     var H = d.frame.h;
     var g = d.grid;
+    var off = d.wallOffset || [0, 0];
     var full = plan ? plan.scale : 100;
     var lib = exprLib() + camLib();
     var common =
@@ -398,8 +399,10 @@ $.global.WALLMAKER = (function () {
       'var gap = C(' + q('Gap (px)') + ', ' + num(g.gap, 0) + ');\n' +
       'var cc = E(' + q('Target column') + ', ' + (plan ? plan.cell[0] : 0) + ');\n' +
       'var cr = E(' + q('Target row') + ', ' + (plan ? plan.cell[1] : 0) + ');\n' +
-      'var px = (cc - ' + ((g.cols - 1) / 2) + ') * (' + g.cellW + ' + gap);\n' +
-      'var py = (cr - ' + ((g.rows - 1) / 2) + ') * (' + g.cellH + ' + gap);\n' +
+      // + the wall's own offset: with 'shift' centring the wall sits half a cell off the comp
+      // centre, and the camera has to aim at where the target actually IS
+      'var px = (cc - ' + ((g.cols - 1) / 2) + ') * (' + g.cellW + ' + gap) + ' + num(off[0], 0) + ';\n' +
+      'var py = (cr - ' + ((g.rows - 1) / 2) + ') * (' + g.cellH + ' + gap) + ' + num(off[1], 0) + ';\n' +
       'var k = ' + full + ' / 100;\n' +
       'var pan = E(' + q('Pan (px)') + ', [0, 0]);\n' +
       '[' + W / 2 + ' + pan[0] - X * Z * k * px, ' + H / 2 + ' + pan[1] - X * Z * k * py]';
@@ -502,6 +505,8 @@ $.global.WALLMAKER = (function () {
     var posP = tf(ctl).property('ADBE Position');
     var sclP = tf(ctl).property('ADBE Scale');
     var oldRig = num(rec.__v, 1) < 2;
+    // where the wall sits in camera space: the origin, plus any 'shift' centring nudge
+    var wallOff = d.wallOffset || [0, 0];
     // Decide ownership BEFORE parenting: assigning a parent makes AE rewrite the child's local
     // transform to preserve its world transform, so afterwards these values mean nothing.
     var offUntouched =
@@ -532,10 +537,10 @@ $.global.WALLMAKER = (function () {
     }
     if (offUntouched) {
       try {
-        posP.setValue([0, 0]);
+        posP.setValue([num(wallOff[0], 0), num(wallOff[1], 0)]);
       } catch (ePos) {}
-      rec.__cx = 0;
-      rec.__cy = 0;
+      rec.__cx = num(wallOff[0], 0);
+      rec.__cy = num(wallOff[1], 0);
     }
     rec.__v = REC_V;
     var fx = ctl.property('ADBE Effect Parade');

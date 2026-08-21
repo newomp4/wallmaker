@@ -89,8 +89,9 @@ for tkey in base['probes']:
     g_ = wall['grid']
     greys = colours = 0
     for s_ in wall['screens']:
-        cx = int(W / 2 + (s_['col'] - (g_['cols'] - 1) / 2) * (g_['cellW'] + g_['gap']))
-        cy = int(H / 2 + (s_['row'] - (g_['rows'] - 1) / 2) * (g_['cellH'] + g_['gap']))
+        ox_, oy_ = wall.get('wallOffset', [0, 0])
+        cx = int(W / 2 + (s_['col'] - (g_['cols'] - 1) / 2) * (g_['cellW'] + g_['gap']) + ox_)
+        cy = int(H / 2 + (s_['row'] - (g_['rows'] - 1) / 2) * (g_['cellH'] + g_['gap']) + oy_)
         if not (0 <= cx < W and 0 <= cy < H):
             continue
         r, g, b, _a = b_px[cx, cy]

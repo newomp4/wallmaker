@@ -3,7 +3,7 @@
  * Pure data in → data out (no DOM), so the host-level tests can run it under Node too.
  */
 import type { Config, FillMode, GridSpec, ScreenSpec } from './types'
-import { gridFor } from './grid'
+import { gridFor, wallOffset } from './grid'
 import { planScreens, planCamera, withAnimation, type CameraPlan } from './reveal'
 
 export interface WallScene {
@@ -15,6 +15,8 @@ export interface WallScene {
   durationSec: number
   bg: { mode: 'solid' | 'transparent'; color: [number, number, number] }
   grid: { rows: number; cols: number; gap: number; cellW: number; cellH: number; wallW: number; wallH: number }
+  /** how far the wall null sits off the comp centre (only ever non-zero in 'shift' centring) */
+  wallOffset: [number, number]
   fill: FillMode
   cornerRadius: number
   camera: CameraPlan | null
@@ -92,6 +94,7 @@ export function compileWall(rawCfg: Config, opts?: { grid?: GridSpec; screens?: 
       wallW: Math.round(grid.cellW * grid.cols + cfg.gap * (grid.cols - 1)),
       wallH: Math.round(grid.cellH * grid.rows + cfg.gap * (grid.rows - 1)),
     },
+    wallOffset: [Math.round(wallOffset(cfg, grid)[0] * 100) / 100, Math.round(wallOffset(cfg, grid)[1] * 100) / 100],
     fill: cfg.fill,
     cornerRadius: cfg.cornerRadius,
     camera: planCamera(cfg, grid, screens),

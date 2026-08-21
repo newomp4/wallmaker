@@ -95,7 +95,7 @@ const ROUNDS = {
       compW: 1920, compH: 1080, fps: 30, durationSec: 10,
       gridMode: 'manual', rows: 4, cols: 5, gap: 6, margin: 0,
       cellAspect: 'wide',
-      featured: 4,
+      featured: 4, centerFit: 'shift', // keeps the even 4x5 grid and nudges the wall instead
       intro: 'zoomOut', introHold: 1, introDur: 2,
       outro: 'zoomIn', outroHold: 0.4, outroDur: 2,
       fill: 'cover', cornerRadius: 0, assign: 'sequential',

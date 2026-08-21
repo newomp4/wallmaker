@@ -8,6 +8,8 @@ export type RevealMode = 'none' | 'random' | 'rows' | 'cols' | 'sequence' | 'sna
 export type CellAspect = 'fill' | 'wide' | 'tv' | 'square' | 'tall' | 'custom'
 /** how the wall relates to the comp frame: sit inside it, or cover it and run off the edges */
 export type WallFit = 'contain' | 'cover'
+/** how to make a cell land dead centre when the camera has a target: change the grid, or move the wall */
+export type CenterFit = 'grid' | 'shift'
 export type ScreenAnim = 'cut' | 'fade' | 'flicker' | 'pop'
 
 export interface CompRef {
@@ -48,6 +50,11 @@ export interface Config {
    * the wall covers the comp — the outer screens are simply cut off by the frame.
    */
   wallFit: WallFit
+  /**
+   * An even row/column count has no middle cell. 'grid' rounds the counts up to odd; 'shift' keeps
+   * your counts exactly and nudges the whole wall half a cell so a screen lands dead centre.
+   */
+  centerFit: CenterFit
 
   // ---- sources / screens ----
   assign: Assign

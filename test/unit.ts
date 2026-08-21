@@ -4,7 +4,7 @@
  */
 import { DEFAULT_CONFIG } from '../src/core/defaults.ts'
 import type { Config } from '../src/core/types.ts'
-import { gridFor, autoGrid, aspectOf, bandsFor, fillGrid, cellOnscreen, offscreenCount } from '../src/core/grid.ts'
+import { gridFor, autoGrid, aspectOf, bandsFor, fillGrid, cellOnscreen, offscreenCount, wallOffset } from '../src/core/grid.ts'
 import { planScreens, planCamera, cameraAt, zoomAt, screenStateAt, withAnimation, centerCell } from '../src/core/reveal.ts'
 import { compileWall, buildKeyFor } from '../src/core/scene.ts'
 
@@ -86,6 +86,30 @@ const cfg = (p: Partial<Config>): Config => ({ ...DEFAULT_CONFIG, videos: Array.
     check(`centred ${rows}x${cols} ${shape}/${fit}: the pinned screen sits dead centre`, Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01, `${g.rows}x${g.cols} offset ${dx.toFixed(1)},${dy.toFixed(1)}`)
     check(`centred ${rows}x${cols} ${shape}/${fit}: odd grid`, g.rows % 2 === 1 && g.cols % 2 === 1, `${g.rows}x${g.cols}`)
   }
+  // 'shift' centring: keep the counts, move the wall instead
+  for (const [rows, cols, shape, fit] of [
+    [4, 6, 'fill', 'contain'],
+    [4, 6, 'tall', 'cover'],
+    [4, 4, 'wide', 'cover'],
+    [6, 6, 'square', 'cover'],
+    [5, 5, 'fill', 'contain'],
+  ] as const) {
+    const c = cfg({ gridMode: 'manual', rows, cols, cellAspect: shape, wallFit: fit, centerFit: 'shift', gap: 10, featured: 0, videos: Array.from({ length: 9 }, (_, i) => `/v/${i}.mp4`) })
+    const g = gridFor(c)
+    const s = planScreens(c, g)
+    const plan = planCamera(c, g, s)!
+    check(`shift ${rows}x${cols} ${shape}/${fit}: the camera target is dead centre`, Math.abs(plan.p[0]) < 0.01 && Math.abs(plan.p[1]) < 0.01, `p ${plan.p} grid ${g.rows}x${g.cols} off ${wallOffset(c, g)}`)
+    if (fit === 'contain') check(`shift ${rows}x${cols}: the grid is left exactly as asked`, g.rows === rows && g.cols === cols, `${g.rows}x${g.cols}`)
+    if (fit === 'cover') check(`shift ${rows}x${cols} ${shape}: still covers the comp with no bands`, bandsFor(c, g).x === 0 && bandsFor(c, g).y === 0, JSON.stringify(bandsFor(c, g)))
+    const t = s[plan.target]
+    check(`shift ${rows}x${cols} ${shape}/${fit}: the target screen is in frame`, cellOnscreen(t.row, t.col, c, g))
+  }
+  // and shifting only happens on an axis that actually needs it
+  const odd5 = cfg({ gridMode: 'manual', rows: 5, cols: 5, cellAspect: 'fill', centerFit: 'shift', featured: 0 })
+  check('an odd grid is never shifted', wallOffset(odd5, gridFor(odd5)).every((v) => v === 0))
+  const noTarget = cfg({ gridMode: 'manual', rows: 4, cols: 6, cellAspect: 'fill', centerFit: 'shift', featured: -1, intro: 'none', outro: 'none' })
+  check('no camera target: no shift, no regrow', wallOffset(noTarget, gridFor(noTarget)).every((v) => v === 0) && gridFor(noTarget).cols === 6)
+
   // a camera move with NO pinned source still needs its target dead centre
   const cam = cfg({ gridMode: 'manual', rows: 4, cols: 6, cellAspect: 'fill', gap: 10, featured: -1, intro: 'zoomOut' })
   const cg = gridFor(cam)

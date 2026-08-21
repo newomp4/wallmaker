@@ -1,7 +1,7 @@
 import type { Config } from '../../core/types'
-import { gridFor } from '../../core/grid'
+import { gridFor, bandsFor, hasCameraTarget } from '../../core/grid'
 import { planScreens, planCamera, withAnimation } from '../../core/reveal'
-import { NumberInput, Row, Section, Select, Toggle } from '../controls'
+import { Field, NumberInput, Row, Section, Segmented, Select, Toggle } from '../controls'
 
 const basename = (p: string) => p.slice(p.lastIndexOf('/') + 1)
 
@@ -10,6 +10,8 @@ export function CameraPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Co
   const centreName =
     cfg.featured >= 0 ? (cfg.featured < cfg.videos.length ? basename(cfg.videos[cfg.featured]) : (cfg.comps[cfg.featured - cfg.videos.length]?.name ?? '')) : ''
   const cam = planCamera(cfg, grid, planScreens(withAnimation(cfg), grid))
+  const bands = bandsFor(cfg, grid)
+  const even = cfg.rows % 2 === 0 || cfg.cols % 2 === 0
   const keys = cam
     ? [
         ...(cam.intro ? (cam.intro.hold > 0 ? [0, cam.intro.hold, cam.intro.end] : [cam.intro.hold, cam.intro.end]) : []),
@@ -34,6 +36,28 @@ export function CameraPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Co
             ? `Dead centre of the ${grid.rows}×${grid.cols} grid, always on — the AE layer “Center · ${centreName}”. Click any screen in the preview to swap it.`
             : 'The camera zooms to the middle cell. Pick one here, or click a screen in the preview.'}
         </p>
+        {hasCameraTarget(cfg) && (
+          <>
+            <Field label="Make a centre by">
+              <Segmented
+                value={cfg.centerFit}
+                options={[
+                  { value: 'grid', label: 'Growing the grid', title: 'Round rows and columns up to odd, so a cell lands in the middle' },
+                  { value: 'shift', label: 'Shifting the wall', title: 'Keep your rows and columns exactly; nudge the whole wall half a cell so a screen lands in the middle' },
+                ]}
+                onChange={(v) => patch({ centerFit: v })}
+              />
+            </Field>
+            {cfg.centerFit === 'grid' && even && cfg.gridMode === 'manual' && (
+              <p className="hint">
+                {cfg.rows}×{cfg.cols} → {grid.rows}×{grid.cols}. Switch to shifting to keep your counts.
+              </p>
+            )}
+            {cfg.centerFit === 'shift' && (bands.x > 1 || bands.y > 1) && (
+              <p className="hint">Shifting leaves a {Math.max(bands.x, bands.y)} px band — set Wall ▸ Fill past edges to cover it.</p>
+            )}
+          </>
+        )}
       </Section>
       <Section title="Move">
         <Toggle label="Zoom out to the wall" value={cfg.intro === 'zoomOut'} onChange={(v) => patch({ intro: v ? 'zoomOut' : 'none' })} />

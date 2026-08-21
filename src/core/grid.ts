@@ -69,8 +69,18 @@ export function gridFor(cfg: Config): GridSpec {
   const cell = cellFor(rows, cols, availW, availH, cfg.gap, aspect) ?? { cellW: Math.max(1, availW / cols), cellH: Math.max(1, availH / rows) }
   // stretched cells already cover the comp exactly, so 'cover' only has work to do with a locked shape
   if (cfg.wallFit === 'cover' && aspect !== null) {
-    cols = odd(Math.max(cols, Math.min(200, Math.ceil((availW + cfg.gap) / (cell.cellW + cfg.gap)))))
-    rows = odd(Math.max(rows, Math.min(200, Math.ceil((availH + cfg.gap) / (cell.cellH + cfg.gap)))))
+    const shifting = hasCameraTarget(cfg) && cfg.centerFit === 'shift'
+    // A shifted wall has to reach half a cell further on the side it moved away from -- but only an
+    // EVEN count is shifted, so growing can remove the need for the shift. Grow to plain coverage
+    // first, then keep growing only while an even count still falls short (monotone, so it settles).
+    const settle = (start: number, avail: number, size: number) => {
+      const step = size + cfg.gap
+      let n = odd(Math.max(start, Math.min(200, Math.ceil((avail + cfg.gap) / step))))
+      while (shifting && n % 2 === 0 && n < 200 && (n * size + (n - 1) * cfg.gap) / 2 < avail / 2 + step / 2 - 0.01) n++
+      return n
+    }
+    cols = settle(cols, availW, cell.cellW)
+    rows = settle(rows, availH, cell.cellH)
   }
   return {
     rows,
@@ -84,8 +94,9 @@ export function gridFor(cfg: Config): GridSpec {
 
 /** Is this cell fully inside the comp frame, or is it one of the ones the frame cuts off? */
 export function cellOnscreen(row: number, col: number, cfg: Config, grid: GridSpec): boolean {
-  const x = (col - (grid.cols - 1) / 2) * (grid.cellW + cfg.gap)
-  const y = (row - (grid.rows - 1) / 2) * (grid.cellH + cfg.gap)
+  const [ox, oy] = wallOffset(cfg, grid)
+  const x = (col - (grid.cols - 1) / 2) * (grid.cellW + cfg.gap) + ox
+  const y = (row - (grid.rows - 1) / 2) * (grid.cellH + cfg.gap) + oy
   return Math.abs(x) + grid.cellW / 2 <= cfg.compW / 2 + 0.5 && Math.abs(y) + grid.cellH / 2 <= cfg.compH / 2 + 0.5
 }
 
@@ -94,17 +105,34 @@ export function cellOnscreen(row: number, col: number, cfg: Config, grid: GridSp
  * zoom move — that target has to sit at the exact middle of the wall, and an even row or column
  * count has no middle cell (the middle lands on a gap).
  */
-export function needsOddGrid(cfg: Config): boolean {
+export function hasCameraTarget(cfg: Config): boolean {
   if (cfg.videos.length + cfg.comps.length === 0) return false
   return cfg.featured >= 0 || cfg.intro === 'zoomOut' || cfg.outro === 'zoomIn'
+}
+
+export function needsOddGrid(cfg: Config): boolean {
+  return hasCameraTarget(cfg) && cfg.centerFit === 'grid'
+}
+
+/**
+ * How far the wall is nudged off the comp centre so that a CELL lands dead centre instead of a gap.
+ * Only in 'shift' mode, and only on an axis with an even count — the centre cell of an even axis
+ * sits exactly half a cell + half a gap to the low side, so that is what we push back.
+ */
+export function wallOffset(cfg: Config, grid: GridSpec): [number, number] {
+  if (!hasCameraTarget(cfg) || cfg.centerFit !== 'shift') return [0, 0]
+  return [grid.cols % 2 === 0 ? (grid.cellW + cfg.gap) / 2 : 0, grid.rows % 2 === 0 ? (grid.cellH + cfg.gap) / 2 : 0]
 }
 
 /** Comp left over around the wall, px per side. 0 = the wall reaches the comp edges. */
 export function bandsFor(cfg: Config, grid?: GridSpec): { x: number; y: number } {
   const g = grid ?? gridFor(cfg)
+  const [ox, oy] = wallOffset(cfg, g)
+  // a shifted wall leaves more on one side than the other -- the worse side is the one you see
+  const side = (avail: number, wall: number, off: number) => Math.max(0, Math.round((avail - wall) / 2 + Math.abs(off)))
   return {
-    x: Math.max(0, Math.round((cfg.compW - 2 * cfg.margin - g.wallW) / 2)),
-    y: Math.max(0, Math.round((cfg.compH - 2 * cfg.margin - g.wallH) / 2)),
+    x: side(cfg.compW - 2 * cfg.margin, g.wallW, ox),
+    y: side(cfg.compH - 2 * cfg.margin, g.wallH, oy),
   }
 }
 
@@ -182,9 +210,10 @@ export function fillGrid(cfg: Config): Partial<Config> {
 
 /** How many cells the comp frame cuts off. 0 when the whole wall is visible. */
 export function offscreenCount(cfg: Config, grid: GridSpec): number {
+  const [ox, oy] = wallOffset(cfg, grid)
   let cols = 0
   let rows = 0
-  for (let c = 0; c < grid.cols; c++) if (Math.abs((c - (grid.cols - 1) / 2) * (grid.cellW + cfg.gap)) + grid.cellW / 2 <= cfg.compW / 2 + 0.5) cols++
-  for (let r = 0; r < grid.rows; r++) if (Math.abs((r - (grid.rows - 1) / 2) * (grid.cellH + cfg.gap)) + grid.cellH / 2 <= cfg.compH / 2 + 0.5) rows++
+  for (let c = 0; c < grid.cols; c++) if (Math.abs((c - (grid.cols - 1) / 2) * (grid.cellW + cfg.gap) + ox) + grid.cellW / 2 <= cfg.compW / 2 + 0.5) cols++
+  for (let r = 0; r < grid.rows; r++) if (Math.abs((r - (grid.rows - 1) / 2) * (grid.cellH + cfg.gap) + oy) + grid.cellH / 2 <= cfg.compH / 2 + 0.5) rows++
   return grid.rows * grid.cols - rows * cols
 }

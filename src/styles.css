@@ -119,6 +119,7 @@ code { background: var(--surface2); padding: 1px 5px; border-radius: 4px; font-s
 }
 .qb-chip:hover { color: var(--text); border-color: var(--text3); }
 .qb-chip.on { background: var(--dim); border-color: transparent; color: var(--text); }
+.qb-warn { color: var(--text3); font-size: 11px; font-variant-numeric: tabular-nums; }
 .qb-select { display: inline-flex; align-items: center; gap: 6px; color: var(--text3); font-size: 11px; }
 .qb-select select {
   appearance: none; height: 24px; background: transparent; border: 1px solid var(--line2); border-radius: 5px;

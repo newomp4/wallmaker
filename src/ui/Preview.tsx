@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Config } from '../core/types'
-import { gridFor } from '../core/grid'
+import { gridFor, wallOffset } from '../core/grid'
 import { planScreens, planCamera, cameraAt, screenStateAt, withAnimation } from '../core/reveal'
 import { isCEP } from '../ae/cep'
 import { QuickBar } from './QuickBar'
@@ -101,6 +101,7 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
   const grid = useMemo(() => gridFor(cfg), [cfg])
   const screens = useMemo(() => planScreens(cfg, grid), [cfg, grid])
   const camera = useMemo(() => planCamera(cfg, grid, screens), [cfg, grid, screens])
+  const wallOff = useMemo(() => wallOffset(cfg, grid), [cfg, grid])
   const sourceCount = cfg.videos.length + cfg.comps.length
 
   useEffect(() => {
@@ -170,8 +171,9 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
       const cw = grid.cellW * scale * cam.k
       const ch = grid.cellH * scale * cam.k
       const gap = cfg.gap * scale * cam.k
-      const cx0 = W / 2 + cam.x * scale
-      const cy0 = H / 2 + cam.y * scale
+      // the wall's own offset rides along with the camera's zoom, exactly like the parented null
+      const cx0 = W / 2 + cam.x * scale + wallOff[0] * scale * cam.k
+      const cy0 = H / 2 + cam.y * scale + wallOff[1] * scale * cam.k
       const baseRadius = cfg.cornerRadius * scale * cam.k
       const tone = tiles()
       // the screen the camera locks onto: the pinned one, or whichever cell it would zoom to
@@ -271,7 +273,7 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
     }
     drawRef.current = draw
     draw(tRef.current)
-  }, [cfg, grid, screens, camera, thumbVersion])
+  }, [cfg, grid, screens, camera, wallOff, thumbVersion])
 
   const pending = isCEP() ? cfg.videos.slice(0, 200).filter((p) => !thumbs.has(p) || thumbs.get(p) === 'loading').length : 0
 
@@ -297,8 +299,8 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
     const cw = grid.cellW * scale * cam.k
     const ch = grid.cellH * scale * cam.k
     const gp = cfg.gap * scale * cam.k
-    const cx0 = Math.round(cfg.compW * scale) / 2 + cam.x * scale
-    const cy0 = Math.round(cfg.compH * scale) / 2 + cam.y * scale
+    const cx0 = Math.round(cfg.compW * scale) / 2 + cam.x * scale + wallOff[0] * scale * cam.k
+    const cy0 = Math.round(cfg.compH * scale) / 2 + cam.y * scale + wallOff[1] * scale * cam.k
     const col = Math.round((x - cx0) / (cw + gp) + (grid.cols - 1) / 2)
     const row = Math.round((y - cy0) / (ch + gp) + (grid.rows - 1) / 2)
     const hit = screens.find((sc) => sc.row === row && sc.col === col)

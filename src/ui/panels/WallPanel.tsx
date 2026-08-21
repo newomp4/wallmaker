@@ -61,12 +61,19 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
         </Field>
         {cfg.cellAspect === 'custom' && <NumberInput label="Width ÷ height" value={cfg.cellAspectCustom} min={0.1} max={10} step={0.01} onChange={(v) => patch({ cellAspectCustom: v })} />}
         {cfg.cellAspect !== 'fill' && (
-          <Field label="Wall">
+          <Field
+            label="Edges"
+            hint={
+              cfg.wallFit === 'cover'
+                ? 'Extra screens are added until the wall covers the comp; the outer ones run off the edges.'
+                : 'The whole wall stays in frame, so cells of a locked shape can leave bands.'
+            }
+          >
             <Segmented
               value={cfg.wallFit}
               options={[
-                { value: 'contain', label: 'Inside', title: 'The whole wall stays in frame — a locked cell shape can leave bands' },
-                { value: 'cover', label: 'Cover', title: 'Keep the cell shape and gap; add screens until the wall covers the comp, letting the outer ones run off the edges' },
+                { value: 'contain', label: 'Fit inside', title: 'The whole wall stays in frame — a locked cell shape can leave bands' },
+                { value: 'cover', label: 'Fill past edges', title: 'Keep the cell shape and gap; add more screens until the wall covers the comp, letting the outer ones be cut off by the frame' },
               ]}
               onChange={(v) => patch({ wallFit: v })}
             />

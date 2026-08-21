@@ -5,7 +5,7 @@
  * same numbers into expressions and keyframes, so what you see in the panel is what After Effects does.
  */
 import type { Config, GridSpec, ScreenSpec } from './types'
-import { gridFor, cellOnscreen } from './grid'
+import { gridFor, cellOnscreen, wallOffset } from './grid'
 import { mulberry32, shuffled } from './rng'
 
 /** 0..1 "how early does this screen turn on" before jitter/normalization, per reveal mode. */
@@ -192,10 +192,13 @@ export function planCamera(cfg: Config, grid: GridSpec, screens: ScreenSpec[]): 
     const start = Math.max(introEnd + 0.1, end - Math.max(0.1, cfg.outroDur))
     if (start < D) outro = { start: r2(start), end: r2(end) }
   }
+  // where the target sits relative to the COMP centre: its cell offset plus however far the wall
+  // itself is nudged, so a shifted wall reports 0 and the camera simply stays put
+  const [ox, oy] = wallOffset(cfg, grid)
   return {
     target,
     cell: [t.col, t.row],
-    p: [r2((t.col - (grid.cols - 1) / 2) * (grid.cellW + cfg.gap)), r2((t.row - (grid.rows - 1) / 2) * (grid.cellH + cfg.gap))],
+    p: [r2((t.col - (grid.cols - 1) / 2) * (grid.cellW + cfg.gap) + ox), r2((t.row - (grid.rows - 1) / 2) * (grid.cellH + cfg.gap) + oy)],
     scale: Math.round(Math.max(cfg.compW / grid.cellW, cfg.compH / grid.cellH) * 100.2 * 100) / 100,
     intro,
     outro,
