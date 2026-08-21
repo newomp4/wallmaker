@@ -90,6 +90,19 @@ export function removeBuild(buildKey: string): Promise<{ removed: boolean }> {
 }
 
 /** Default folder for wall.json: next to the AE project, or ~/Documents/Wallmaker while unsaved. */
+export interface ProxyState {
+  found: boolean
+  count: number
+  using: number
+  failed?: number
+  reason?: string
+}
+
+/** Fast preview: swap every source for a solid of its own size (or back). Omit `on` to just read the state. */
+export function proxies(buildKey: string, on?: boolean): Promise<ProxyState> {
+  return callHost<ProxyState>('proxies', on === undefined ? { buildKey } : { buildKey, on })
+}
+
 export function defaultBuildFolder(info: AEHostInfo | null, buildKey: string): string {
   const base = info?.projectDir ? posixPath(info.projectDir) + '/Wallmaker' : posixPath(systemPath('myDocuments')) + '/Wallmaker'
   return `${base}/${buildKey}`

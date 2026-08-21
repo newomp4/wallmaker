@@ -36,6 +36,11 @@ Point it at a folder of videos (or select comps right in your project), choose t
 - **Dead screens**: monitors that never come on, with or without the reveal.
 - Deterministic from a seed; the preview plays exactly what AE will do.
 
+**Fast preview**
+- One toggle in the Build tab swaps every source for a **solid proxy of its own exact dimensions**, so AE stops decoding video entirely — the expensive part of a big wall. Flip it back before you render.
+- Nothing about the layers changes: same parenting, transforms, masks, expressions and in/out points. The test suite renders the same frames three ways (real → proxies → real) and asserts the **alpha channel is identical byte for byte**, every screen's evaluated position/scale/opacity is exactly equal, and turning it off reproduces the original frames byte for byte.
+- Caveats worth knowing: a solid proxy is opaque, so a source with its own alpha renders as a filled rectangle while it's on; and proxying a *comp* affects that comp everywhere it's used in your project (standard AE proxy behaviour — the toggle undoes it).
+
 **In After Effects — live, no rebuild**
 - Move / scale / rotate the **Wallmaker Controls** null → the whole wall follows. Animate the **Wallmaker Camera** null's controls → the shot follows.
 - Sliders drive the wall through expressions: **Gap (px)** (keyframe it — the screens fly apart), **Reveal start / duration (s)**, **Turn-on (frames)**, **Dead screens (%)**, **Screen scale (%)**, **Screens opacity (%)**.

@@ -4,13 +4,16 @@ import { gridFor } from '../../core/grid'
 import { planScreens, withAnimation } from '../../core/reveal'
 import { buildKeyFor } from '../../core/scene'
 import { isCEP } from '../../ae/cep'
-import { buildInAE, defaultBuildFolder, hostInfoAE, removeBuild, type AEHostInfo } from '../../ae/build'
+import { buildInAE, defaultBuildFolder, hostInfoAE, removeBuild, proxies, type AEHostInfo, type ProxyState } from '../../ae/build'
+import { Toggle } from '../controls'
 import { setBuildState, useBuildState } from '../buildStore'
 
 export function BuildPanel({ cfg }: { cfg: Config }) {
   const inAE = isCEP()
   const [info, setInfo] = useState<AEHostInfo | null>(null)
   const [infoErr, setInfoErr] = useState('')
+  const [prox, setProx] = useState<ProxyState | null>(null)
+  const buildKey = buildKeyFor(cfg.compName)
   const { busy, progress, result, error, removed } = useBuildState()
   const grid = gridFor(cfg)
   const n = planScreens(withAnimation(cfg), grid).length
@@ -22,6 +25,26 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
       .then(setInfo)
       .catch((e) => setInfoErr(String(e instanceof Error ? e.message : e)))
   }, [inAE])
+
+  // does a build of this comp exist, and is it on stand-ins right now?
+  useEffect(() => {
+    if (!inAE) return
+    let live = true
+    proxies(buildKey)
+      .then((p) => live && setProx(p))
+      .catch(() => live && setProx(null))
+    return () => {
+      live = false
+    }
+  }, [inAE, buildKey, result, removed])
+
+  const setFast = async (on: boolean) => {
+    try {
+      setProx(await proxies(buildKey, on))
+    } catch (e) {
+      setBuildState({ error: String(e instanceof Error ? e.message : e) })
+    }
+  }
 
   const build = async () => {
     if (busy) return
@@ -94,6 +117,17 @@ export function BuildPanel({ cfg }: { cfg: Config }) {
             </div>
             <div className="ptext">{progress.message}</div>
           </div>
+        )}
+        {prox?.found && prox.count > 0 && (
+          <>
+            <Toggle label="Fast preview" value={prox.using > 0} onChange={setFast} />
+            <p className="hint">
+              {prox.using > 0
+                ? `${prox.using} of ${prox.count} sources on grey stand-ins — no video decoding. Turn off before you render.`
+                : `Swaps all ${prox.count} sources for solids of the same size. Identical geometry; nothing else changes.`}
+            </p>
+            {!!prox.failed && prox.failed > 0 && <p className="hint err">{prox.failed} source(s) refused a stand-in{prox.reason ? `: ${prox.reason}` : ''}</p>}
+          </>
         )}
         {error && <p className="hint err">{error}</p>}
         {removed && <p className="hint ok">{removed}</p>}

@@ -894,6 +894,92 @@ $.global.WALLMAKER = (function () {
     }
   }
 
+  // ---------------------------------------------------------------- fast preview (proxies)
+
+  /** A stable mid-grey per source, so a proxied wall still reads as a grid of distinct screens. */
+  function greyFor(name) {
+    var h = 2166136261;
+    for (var i = 0; i < String(name).length; i++) {
+      h = h ^ String(name).charCodeAt(i);
+      h = (h * 16777619) >>> 0;
+    }
+    return 0.16 + (h % 9) * 0.028;
+  }
+
+  /** Every distinct source an actual screen layer points at (footage AND comps). */
+  function screenSources(comp) {
+    var out = [];
+    var seen = {};
+    for (var i = 1; i <= comp.numLayers; i++) {
+      var l = comp.layer(i);
+      if (typeof l.comment !== 'string' || l.comment.indexOf(TAG + '-screen') !== 0) continue;
+      var src = null;
+      try {
+        src = l.source;
+      } catch (e) {}
+      if (!src || seen['i' + src.id]) continue;
+      seen['i' + src.id] = 1;
+      out.push(src);
+    }
+    return out;
+  }
+
+  /**
+   * Fast preview: give every source a SOLID PROXY of its own exact dimensions and switch to it.
+   *
+   * Nothing about the layers changes -- same parenting, position, scale, masks, expressions and
+   * in/out points -- because the proxy reports the same width/height/pixel aspect as the real
+   * source. AE simply stops decoding video, which is the whole cost of a big wall. Flipping
+   * `useProxy` back renders the real thing again, pixel for pixel.
+   *
+   * Called with no `on` it just reports the current state.
+   */
+  function proxies(json) {
+    var a = args(json);
+    var key = String(a.buildKey || '');
+    var comp = null;
+    var items = app.project.items;
+    for (var i = 1; i <= items.length; i++) if (items[i] instanceof CompItem && items[i].comment === TAG + '-comp ' + key) comp = items[i];
+    if (!comp) return reply({ found: false, count: 0, using: 0 });
+    var srcs = screenSources(comp);
+    var failed = 0;
+    var why = '';
+    if (typeof a.on === 'boolean') {
+      app.beginUndoGroup('Wallmaker: fast preview ' + (a.on ? 'on' : 'off'));
+      try {
+        for (var k = 0; k < srcs.length; k++) {
+          var it = srcs[k];
+          try {
+            if (a.on) {
+              if (!it.useProxy && it.proxySource === null) {
+                var g = greyFor(it.name);
+                // the proxy MUST match the source's dimensions or every layer's scale would mean
+                // something different and the wall would shift
+                it.setProxyWithSolid([g, g, g], 'WM preview ' + it.name, Math.max(2, it.width), Math.max(2, it.height), it.pixelAspect);
+              }
+              it.useProxy = true;
+            } else {
+              it.useProxy = false;
+            }
+          } catch (eP) {
+            failed++;
+            if (!why) why = String(eP && eP.message ? eP.message : eP);
+          }
+        }
+      } finally {
+        app.endUndoGroup();
+      }
+    }
+    var using = 0;
+    for (var m = 0; m < srcs.length; m++) {
+      try {
+        if (srcs[m].useProxy) using++;
+      } catch (eU) {}
+    }
+    // NOTE: never call this key 'error' -- callHost treats any reply carrying one as a thrown error
+    return reply({ found: true, count: srcs.length, using: using, failed: failed, reason: why });
+  }
+
   // ---------------------------------------------------------------- info / testing
 
   /** What's selected in the Project panel, as wall sources: video files + comps (never our own builds). */
@@ -986,6 +1072,27 @@ $.global.WALLMAKER = (function () {
     });
   }
 
+  /** Each screen layer's SOURCE dimensions -- what a proxy must reproduce exactly or the wall moves. */
+  function sourceDims(json) {
+    var a = args(json);
+    var comp = findCompByName(String(a.compName));
+    if (!comp) throw new Error('Comp not found: ' + a.compName);
+    var out = [];
+    for (var i = 1; i <= comp.numLayers; i++) {
+      var l = comp.layer(i);
+      if (typeof l.comment !== 'string' || l.comment.indexOf(TAG + '-screen') !== 0) continue;
+      var src = l.source;
+      out.push({
+        idx: parseInt(l.comment.substring((TAG + '-screen ').length), 10),
+        w: src ? src.width : 0,
+        h: src ? src.height : 0,
+        par: src ? src.pixelAspect : 0,
+        proxy: src && src.useProxy ? 1 : 0
+      });
+    }
+    return reply(out);
+  }
+
   /** Name/comment/enabled of every layer in a comp (structure verification in the tests). */
   function layersInfo(json) {
     var a = args(json);
@@ -999,5 +1106,5 @@ $.global.WALLMAKER = (function () {
     return reply(out);
   }
 
-  return { info: info, begin: begin, step: step, finish: finish, remove: removeBuild, selectedSources: selectedSources, snapshot: snapshot, probe: probe, camState: camState, layers: layersInfo, version: VERSION };
+  return { info: info, begin: begin, step: step, finish: finish, remove: removeBuild, selectedSources: selectedSources, proxies: proxies, sourceDims: sourceDims, snapshot: snapshot, probe: probe, camState: camState, layers: layersInfo, version: VERSION };
 })();

@@ -91,12 +91,29 @@ Never build a string with `+ someArray/Error` — `String(x)` first. If you ever
 exactly ONE scripted TextDocument write per build (AE leaks undo objects per set — duplicate a
 template and drive the copies with a `sourceText` *expression*).
 
+## Fast preview (proxies)
+
+`WALLMAKER.proxies({buildKey, on})` gives every source an `AVItem.setProxyWithSolid(color, name,
+width, height, pixelAspect)` — note **five** args, no duration; passing six throws — using the
+source's own width/height/pixel aspect, then flips `useProxy`. The layers are never touched, so
+geometry cannot drift: AE maps source pixels through the layer transform, and identical source
+dimensions give identical device pixels. Sources that already have a proxy keep it and are just
+switched on/off.
+
+Round G proves it rather than asserting it: it renders the same frames real -> proxied -> real in
+three separate `DoScript` passes (a queued `saveFrameToPng` must never straddle a toggle) on a
+**transparent** background, so `test/verify-proxy.py` can compare the ALPHA channel — pure coverage,
+independent of colour — and require it identical to the byte, plus exact equality of every screen's
+evaluated position/scale/opacity and a byte-for-byte restore.
+
+Reply keys must never be called `error`: `callHost` throws on any reply carrying one.
+
 ## Testing
 
 ```bash
 npm run test:unit     # pure-core unit tests (plan determinism, grid/camera math, thresholds)
 npm run test:videos   # ffmpeg: 12 solid-color clips + 2 patterned, .test-assets/
-npm run test:host     # rounds A+B+D — ⚠ closes the current AE project without saving
+npm run test:host     # rounds A+B+D+F+G — ⚠ closes the current AE project without saving
 npm run test:rebuild  # round E (rebuild-in-place / remove lifecycle) — same warning
 npm run test:panel    # round C — needs the panel installed & open (npm run cep:install, restart AE)
 ```
