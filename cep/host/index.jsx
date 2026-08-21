@@ -1080,6 +1080,131 @@ $.global.WALLMAKER = (function () {
     }
   }
 
+  // ---------------------------------------------------------------- baked tiles
+
+  /**
+   * Import a baked wall (tiles.json + the tile movies) and lay it back out.
+   *
+   * Every tile is parented to ONE null, "Wallmaker Tiles", sitting at the centre of the comp with
+   * no keyframes on it at all. Move, scale or rotate that null and the whole wall follows as one
+   * piece -- that is the handle for your own camera move. The tiles overlap by their bleed, so a
+   * scaler always has pixels to sample past each edge and the joins stay invisible at any zoom.
+   */
+  function importTiles(json) {
+    var a = args(json);
+    var data = J.parse(readFile(String(a.jsonPath)));
+    if (!data || data.version !== 1) throw new Error('Unexpected tiles data');
+    var dir = String(a.dir || '');
+    if (!dir) {
+      var jf = new File(String(a.jsonPath));
+      dir = jf.parent.fsName.replace(/\\/g, '/');
+    }
+    var name = String(data.compName || 'Wall') + ' \u00b7 tiles';
+    app.beginUndoGroup('Wallmaker: import tiles');
+    var scratch = null;
+    try {
+      dropStaleScratch();
+      scratch = parkViewer();
+      var root = null;
+      var items = app.project.items;
+      for (var i = 1; i <= items.length; i++) if (items[i] instanceof FolderItem && items[i].comment === TAG + '-tileroot ' + name) root = items[i];
+      if (!root) {
+        root = app.project.items.addFolder('Wallmaker tiles \u00b7 ' + String(data.compName || 'Wall'));
+        root.comment = TAG + '-tileroot ' + name;
+      }
+
+      // reuse the comp if we made it before, so anything you parented to it survives
+      var comp = null;
+      for (var c = 1; c <= items.length; c++) if (items[c] instanceof CompItem && items[c].comment === TAG + '-tilecomp ' + name) comp = items[c];
+      var dur = Math.max(1 / data.fps, data.durationSec);
+      if (!comp) {
+        comp = app.project.items.addComp(name, data.frame.w, data.frame.h, 1, dur, data.fps);
+        comp.comment = TAG + '-tilecomp ' + name;
+        comp.parentFolder = root;
+      } else {
+        comp.width = data.frame.w;
+        comp.height = data.frame.h;
+        comp.duration = dur;
+        comp.frameRate = data.fps;
+        for (var k = comp.numLayers; k >= 1; k--) {
+          var old = comp.layer(k);
+          if (isOurs(old) && old.comment.indexOf(TAG + '-tilenull') !== 0) old.remove();
+        }
+      }
+
+      // the one handle for everything
+      var nul = findTagged(comp, 'tilenull');
+      if (!nul) {
+        nul = comp.layers.addNull(comp.duration);
+        nul.name = 'Wallmaker Tiles';
+        nul.comment = TAG + '-tilenull';
+        tf(nul).property('ADBE Anchor Point').setValue([0, 0]);
+        tf(nul).property('ADBE Position').setValue([data.frame.w / 2, data.frame.h / 2]);
+      }
+      nul.enabled = false;
+      try {
+        nul.startTime = 0;
+        nul.inPoint = 0;
+        nul.outPoint = comp.duration;
+      } catch (eSpan) {}
+
+      var scale = 100 / Math.max(0.0001, data.scale);
+      var made = 0;
+      var missing = [];
+      for (var t = 0; t < data.tiles.length; t++) {
+        var td = data.tiles[t];
+        var f = new File(dir + '/' + td.file);
+        if (!f.exists) {
+          missing.push(td.file);
+          continue;
+        }
+        var io = new ImportOptions(f);
+        io.importAs = ImportAsType.FOOTAGE;
+        var it = app.project.importFile(io);
+        it.parentFolder = root;
+        it.comment = TAG + '-tile';
+        var ly = comp.layers.add(it);
+        if (!ly) {
+          missing.push(td.file);
+          continue;
+        }
+        ly.name = 'Tile ' + td.file.replace(/\.[^.]+$/, '').replace(/^tile-/, '');
+        ly.comment = TAG + '-tilelayer ' + t;
+        ly.parent = nul; // parent FIRST, then write the transform -- AE rewrites it otherwise
+        tf(ly).property('ADBE Anchor Point').setValue([td.w / 2, td.h / 2]);
+        tf(ly).property('ADBE Position').setValue([td.cx, td.cy]);
+        tf(ly).property('ADBE Scale').setValue([scale, scale]);
+        try {
+          ly.inPoint = 0;
+          ly.startTime = 0;
+          ly.outPoint = comp.duration;
+        } catch (eT) {}
+        made++;
+      }
+
+      // the wall's own backdrop, so the gaps read the same as they do live
+      if (data.bg) {
+        var rgb = [0, 0, 0];
+        var mm = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(data.bg));
+        if (mm) rgb = [parseInt(mm[1], 16) / 255, parseInt(mm[2], 16) / 255, parseInt(mm[3], 16) / 255];
+        var bg = comp.layers.addSolid(rgb, 'Background', data.frame.w, data.frame.h, 1, comp.duration);
+        bg.comment = TAG + '-tilebg';
+        try {
+          bg.source.parentFolder = root;
+          bg.source.comment = TAG + '-solid';
+        } catch (eB) {}
+        bg.moveToEnd();
+      }
+      nul.moveToBeginning();
+      unparkViewer(scratch, comp);
+      scratch = null;
+      return reply({ compName: comp.name, tiles: made, missing: missing, scale: data.scale, master: data.master });
+    } finally {
+      if (scratch) unparkViewer(scratch, null);
+      app.endUndoGroup();
+    }
+  }
+
   // ---------------------------------------------------------------- fast preview (proxies)
 
   /** AE caps a solid's name at 31 BYTES, so a long filename cannot go in whole. ASCII + truncate. */
@@ -1298,5 +1423,5 @@ $.global.WALLMAKER = (function () {
     return reply(out);
   }
 
-  return { info: info, begin: begin, step: step, finish: finish, remove: removeBuild, selectedSources: selectedSources, proxies: proxies, layout: layoutOnly, sourceDims: sourceDims, snapshot: snapshot, probe: probe, camState: camState, layers: layersInfo, version: VERSION };
+  return { info: info, begin: begin, step: step, finish: finish, remove: removeBuild, selectedSources: selectedSources, importTiles: importTiles, proxies: proxies, layout: layoutOnly, sourceDims: sourceDims, snapshot: snapshot, probe: probe, camState: camState, layers: layersInfo, version: VERSION };
 })();
