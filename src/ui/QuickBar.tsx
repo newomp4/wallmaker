@@ -4,7 +4,7 @@
  * Touching rows/columns while the grid is automatic switches it to manual from the current layout.
  */
 import type { Config, CellAspect } from '../core/types'
-import { gridFor, bandsFor, fillGrid } from '../core/grid'
+import { gridFor, bandsFor, fillGrid, needsOddGrid } from '../core/grid'
 import { Stepper } from './controls'
 
 const ASPECTS: { value: CellAspect; label: string }[] = [
@@ -19,8 +19,8 @@ const ASPECTS: { value: CellAspect; label: string }[] = [
 export function QuickBar({ cfg, patch }: { cfg: Config; patch: (p: Partial<Config>) => void }) {
   const grid = gridFor(cfg)
   const bands = bandsFor(cfg, grid)
-  // a centred screen only exists on an odd grid, so the counts step two at a time
-  const step = cfg.featured >= 0 && cfg.videos.length + cfg.comps.length > 0 ? 2 : 1
+  // the camera's target only sits dead centre on an odd grid, so the counts step two at a time
+  const step = needsOddGrid(cfg) ? 2 : 1
   const toManual = (p: Partial<Config>) => patch({ gridMode: 'manual', rows: grid.rows, cols: grid.cols, ...p })
   return (
     <div className="quickbar">

@@ -25,7 +25,8 @@ Point it at a folder of videos (or select comps right in your project), choose t
 
 **The camera — the zoom-out**
 - Pick a **centered screen**: one source (file or comp) pinned to the middle cell, always on, playing from its start, kept out of the general rotation. Same size as everything else. **Click any screen in the preview** to move its video to the centre (click the centre one to clear it); it's ringed on the wall and named under the preview.
-- A middle cell only exists on an **odd grid**, so while a screen is centered the rows and columns round up to odd — otherwise "centered" would sit half a cell off (a 4 × 4 wall has no middle).
+- A middle cell only exists on an **odd grid**, so whenever the camera has a target — a pinned screen or a zoom move — the rows and columns round up to odd. Otherwise "centered" sits half a cell off, because a 4 × 6 wall has no middle cell.
+- **You can see it before you build**: the target screen wears viewfinder ticks in the live preview, and a crosshair marks the comp's exact centre — if it sits in the middle of the ticked screen, the wall is centered. The line under the preview names the source (`… · center clip-05.mp4`), or says nothing when none is set.
 - **In After Effects it's findable**: the layer is named `Center · yourclip.mp4` (search "Center" in the timeline), it sits directly under the two rig nulls, and it's the only screen with a green label. No centered screen set, no `Center` layer.
 - Turn on **Start on the centered screen, pull back to the wall** and/or **Push back into it at the end**. That's the "start inside my video, zoom out into a wall of videos" shot, in two clicks.
 - In AE the move is **one keyframed slider**: `Zoom to screen (%)` on the Wallmaker Camera null — 0 = the whole wall, 100 = that screen filling the comp. Retime the keys, re-ease them in the graph editor, replace them entirely, drive them from another property. A rebuild **never touches keyframes you have edited**.

@@ -62,10 +62,7 @@ export function gridFor(cfg: Config): GridSpec {
   const base = cfg.gridMode === 'manual' ? { rows: Math.max(1, cfg.rows), cols: Math.max(1, cfg.cols) } : autoGrid(n, cfg.compW, cfg.compH, cfg.gap, cfg.margin, aspect)
   const availW = Math.max(1, cfg.compW - 2 * cfg.margin)
   const availH = Math.max(1, cfg.compH - 2 * cfg.margin)
-  // A centred screen needs a cell that sits EXACTLY in the middle of the wall, and an even row or
-  // column count has no such cell -- the middle falls on a gap, and the "centred" screen ends up
-  // half a cell off. So while one is chosen, the grid rounds up to odd counts.
-  const centred = cfg.featured >= 0 && cfg.videos.length + cfg.comps.length > 0
+  const centred = needsOddGrid(cfg)
   const odd = (v: number) => (centred && v % 2 === 0 ? v + 1 : v)
   let rows = odd(base.rows)
   let cols = odd(base.cols)
@@ -90,6 +87,16 @@ export function cellOnscreen(row: number, col: number, cfg: Config, grid: GridSp
   const x = (col - (grid.cols - 1) / 2) * (grid.cellW + cfg.gap)
   const y = (row - (grid.rows - 1) / 2) * (grid.cellH + cfg.gap)
   return Math.abs(x) + grid.cellW / 2 <= cfg.compW / 2 + 0.5 && Math.abs(y) + grid.cellH / 2 <= cfg.compH / 2 + 0.5
+}
+
+/**
+ * Does this wall need an odd grid? Whenever the camera has a target — a pinned centre screen or a
+ * zoom move — that target has to sit at the exact middle of the wall, and an even row or column
+ * count has no middle cell (the middle lands on a gap).
+ */
+export function needsOddGrid(cfg: Config): boolean {
+  if (cfg.videos.length + cfg.comps.length === 0) return false
+  return cfg.featured >= 0 || cfg.intro === 'zoomOut' || cfg.outro === 'zoomIn'
 }
 
 /** Comp left over around the wall, px per side. 0 = the wall reaches the comp edges. */
@@ -128,8 +135,8 @@ export function fillGrid(cfg: Config): Partial<Config> {
   const g = gridFor(cfg)
   const aspect = aspectOf(cfg)
   const want = Math.max(1, cfg.gridMode === 'manual' ? cfg.rows * cfg.cols : cfg.videos.length + cfg.comps.length || g.rows * g.cols)
-  // a centred screen forces odd counts (see gridFor), so only odd grids can actually stay flush
-  const centred = cfg.featured >= 0 && cfg.videos.length + cfg.comps.length > 0
+  // a camera target forces odd counts (see gridFor), so only odd grids can actually stay flush
+  const centred = needsOddGrid(cfg)
   const step = centred ? 2 : 1
   const from = centred ? 1 : 1
 

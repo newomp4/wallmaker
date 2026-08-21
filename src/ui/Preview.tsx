@@ -174,6 +174,8 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
       const cy0 = H / 2 + cam.y * scale
       const baseRadius = cfg.cornerRadius * scale * cam.k
       const tone = tiles()
+      // the screen the camera locks onto: the pinned one, or whichever cell it would zoom to
+      const marked = camera && (camera.intro || camera.outro || screens.some((sc) => sc.featured)) ? camera.target : -1
 
       for (const s of screens) {
         const st = screenStateAt(t, s, cfg)
@@ -218,17 +220,53 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
         ctx.restore()
         // the centered screen gets a ring -- drawn OUTSIDE the clip and inset, or half the stroke
         // disappears into the cell edge and the marker is invisible at preview scale
-        if (s.featured && w >= 20) {
-          const lw = Math.max(2, 3 * scale * cam.k)
+        if ((s.featured || s.i === marked) && w >= 20) {
+          // viewfinder ticks rather than a border: they read as a target, and with the crosshair
+          // below they make "perfectly centred" something you can SEE before you build anything
+          const lw = Math.max(1.5, 2.5 * scale * cam.k)
+          const tick = Math.min(w, h) * 0.2
+          const x0 = px - w / 2 + lw / 2
+          const x1 = px + w / 2 - lw / 2
+          const y0 = py - h / 2 + lw / 2
+          const y1 = py + h / 2 - lw / 2
           ctx.save()
-          ctx.strokeStyle = 'rgba(255,255,255,.92)'
+          ctx.strokeStyle = 'rgba(255,255,255,.95)'
           ctx.lineWidth = lw
-          ctx.shadowColor = 'rgba(0,0,0,.6)'
-          ctx.shadowBlur = 10 * scale * cam.k
-          rr(ctx, px - w / 2 + lw / 2, py - h / 2 + lw / 2, w - lw, h - lw, Math.max(0, radius - lw / 2))
+          ctx.lineJoin = 'round'
+          ctx.lineCap = 'round'
+          ctx.shadowColor = 'rgba(0,0,0,.65)'
+          ctx.shadowBlur = 7 * scale
+          ctx.beginPath()
+          ctx.moveTo(x0, y0 + tick)
+          ctx.lineTo(x0, y0)
+          ctx.lineTo(x0 + tick, y0)
+          ctx.moveTo(x1 - tick, y0)
+          ctx.lineTo(x1, y0)
+          ctx.lineTo(x1, y0 + tick)
+          ctx.moveTo(x1, y1 - tick)
+          ctx.lineTo(x1, y1)
+          ctx.lineTo(x1 - tick, y1)
+          ctx.moveTo(x0 + tick, y1)
+          ctx.lineTo(x0, y1)
+          ctx.lineTo(x0, y1 - tick)
           ctx.stroke()
           ctx.restore()
         }
+      }
+
+      // the comp's dead centre: if the ticked screen really is centred, this sits in its middle
+      if (marked >= 0) {
+        const arm = Math.max(7, 11 * scale)
+        ctx.save()
+        ctx.strokeStyle = 'rgba(255,255,255,.6)'
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.moveTo(W / 2 - arm, H / 2)
+        ctx.lineTo(W / 2 + arm, H / 2)
+        ctx.moveTo(W / 2, H / 2 - arm)
+        ctx.lineTo(W / 2, H / 2 + arm)
+        ctx.stroke()
+        ctx.restore()
       }
     }
     drawRef.current = draw

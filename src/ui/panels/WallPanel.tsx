@@ -1,7 +1,7 @@
 import type { Config, CellAspect } from '../../core/types'
 import { COMP_PRESETS } from '../../core/defaults'
 import { PRESETS } from '../../core/presets'
-import { gridFor, bandsFor, fillGrid, offscreenCount } from '../../core/grid'
+import { gridFor, bandsFor, fillGrid, offscreenCount, needsOddGrid } from '../../core/grid'
 import { ColorInput, Field, NumberInput, Row, Section, Segmented, Select, Slider, TextInput, Toggle } from '../controls'
 
 /** Does a preset describe the layout the config is already in? (so the chip can show as active) */
@@ -14,7 +14,7 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
   const bands = bandsFor(cfg, grid)
   const flush = bands.x <= 1 && bands.y <= 1
   const cut = offscreenCount(cfg, grid)
-  const centred = cfg.featured >= 0 && cfg.videos.length + cfg.comps.length > 0
+  const centred = needsOddGrid(cfg)
   const step = centred ? 2 : 1
   return (
     <>
@@ -42,7 +42,7 @@ export function WallPanel({ cfg, patch }: { cfg: Config; patch: (p: Partial<Conf
               <NumberInput label="Rows" value={grid.rows} min={1} max={64} step={step} onChange={(v) => patch({ rows: Math.round(v) })} />
               <NumberInput label="Columns" value={grid.cols} min={1} max={64} step={step} onChange={(v) => patch({ cols: Math.round(v) })} />
             </Row>
-            {centred && (cfg.rows % 2 === 0 || cfg.cols % 2 === 0) && <p className="hint">Odd counts — a centre screen needs a middle cell.</p>}
+            {centred && (cfg.rows % 2 === 0 || cfg.cols % 2 === 0) && <p className="hint">Odd counts — the camera's target needs a middle cell.</p>}
           </>
         )}
         <Field label="Cell shape">
