@@ -12,6 +12,7 @@
     "cep:install": "npm run build:cep && node scripts/install-cep.mjs",
     "cep:link": "npm run build:cep && node scripts/install-cep.mjs --link",
     "cep:uninstall": "node scripts/install-cep.mjs --uninstall",
+    "test": "npm run typecheck && npm run lint && npm run test:unit && npm run test:fuzz && npm run test:host && npm run test:rebuild && npm run test:robust",
     "test:unit": "tsx test/unit.ts",
     "test:videos": "node scripts/make-test-videos.mjs",
     "test:host": "node test/run-host.mjs",
