@@ -358,8 +358,9 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
         <div className="preview-meta">
           {grid.rows}×{grid.cols} · {screens.length} screens · {Math.round(grid.cellW)}×{Math.round(grid.cellH)}
           {sourceCount > 0 ? ` · ${sourceCount} source${sourceCount === 1 ? '' : 's'}` : ''}
-          {centerName ? ` · center ${centerName}` : ''}
           {pending > 0 ? ` · loading ${pending}` : ''}
+          {/* always present, set or not: an absent label is impossible to tell apart from "not shown" */}
+          {sourceCount > 0 && <b className={centerName ? 'meta-on' : 'meta-off'}> · center: {centerName || 'none'}</b>}
         </div>
       </div>
       <QuickBar cfg={rawCfg} patch={patch} />
