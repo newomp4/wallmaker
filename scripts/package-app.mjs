@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Package the desktop app into ~/Downloads as a double-clickable .app. */
 import { packager } from '@electron/packager'
+import { execFileSync, spawn } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -44,4 +45,37 @@ const built = join(paths[0], 'Wallmaker.app')
 renameSync(built, appPath)
 rmSync(paths[0], { recursive: true, force: true })
 rmSync(stage, { recursive: true, force: true })
-console.log(`✓ ${appPath}`)
+
+// no quarantine flag, so double-clicking never hits "unidentified developer".
+// NOTE: do NOT `codesign --deep` an Electron app -- it re-signs the outer binary but leaves the
+// framework on its own identity and macOS then refuses to load it ("different Team IDs"). The
+// packager's own ad-hoc linker signature is correct; leave it alone.
+try {
+  execFileSync('xattr', ['-cr', appPath])
+} catch {
+  /* nothing to clear */
+}
+
+// Prove the bundle actually launches. A broken .app (missing framework, bad signature) looks
+// perfectly fine on disk and only fails when you double-click it.
+const bin = join(appPath, 'Contents/MacOS/Wallmaker')
+const probe = spawn(bin, ['--remote-debugging-port=9399'], { stdio: ['ignore', 'ignore', 'pipe'] })
+let stderr = ''
+probe.stderr.on('data', (d) => { stderr += d.toString() })
+let alive = false
+for (let i = 0; i < 40; i++) {
+  await new Promise((r) => setTimeout(r, 500))
+  try {
+    const res = await fetch('http://127.0.0.1:9399/json')
+    if (res.ok) { alive = true; break }
+  } catch {
+    /* not up yet */
+  }
+  if (probe.exitCode !== null) break
+}
+try { probe.kill('SIGTERM') } catch { /* already gone */ }
+if (!alive) {
+  console.error(`✗ ${appPath} was built but does not launch:\n${stderr.split('\n').slice(0, 6).join('\n')}`)
+  process.exit(1)
+}
+console.log(`✓ ${appPath} — launches cleanly`)
