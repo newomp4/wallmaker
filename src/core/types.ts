@@ -82,6 +82,15 @@ export interface Config {
   bgColor: string
 
   // ---- power-on ----
+  // ---- baked tiles ----
+  /** how far you can zoom before it softens; 0 = auto (one whole screen filling the frame) */
+  tileZoom: number
+  tileCodec: 'h264' | 'prores'
+  /** h264 bitrate in Mb/s */
+  tileQuality: number
+  /** largest tile edge in pixels */
+  tileMax: number
+
   /** master switch: off = every screen is simply on (no animation at all) */
   animate: boolean
   reveal: RevealMode

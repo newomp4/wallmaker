@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Config } from '../core/types'
 import { gridFor, wallOffset } from '../core/grid'
 import { planScreens, planCamera, cameraAt, screenStateAt, withAnimation } from '../core/reveal'
-import { isCEP } from '../ae/cep'
+import { isNative } from '../ae/cep'
 import { QuickBar } from './QuickBar'
 import { useSources } from './useSources'
 
@@ -18,7 +18,7 @@ let thumbActive = 0
 let bumpVersion: (() => void) | null = null
 
 function requestThumb(path: string) {
-  if (!isCEP() || thumbs.has(path)) return
+  if (!isNative() || thumbs.has(path)) return
   thumbs.set(path, 'loading')
   thumbQueue.push(path)
   pumpThumbs()
@@ -275,7 +275,7 @@ export function Preview({ cfg: rawCfg, patch }: { cfg: Config; patch: (p: Partia
     draw(tRef.current)
   }, [cfg, grid, screens, camera, wallOff, thumbVersion])
 
-  const pending = isCEP() ? cfg.videos.slice(0, 200).filter((p) => !thumbs.has(p) || thumbs.get(p) === 'loading').length : 0
+  const pending = isNative() ? cfg.videos.slice(0, 200).filter((p) => !thumbs.has(p) || thumbs.get(p) === 'loading').length : 0
 
   const seek = (t: number) => {
     tRef.current = t

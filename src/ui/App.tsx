@@ -7,12 +7,13 @@ import { WallPanel } from './panels/WallPanel'
 import { CameraPanel } from './panels/CameraPanel'
 import { AnimatePanel } from './panels/AnimatePanel'
 import { BuildPanel } from './panels/BuildPanel'
-import { callHost } from '../ae/cep'
+import { TilesPanel } from './panels/TilesPanel'
+import { callHost, isDesktop } from '../ae/cep'
 import { useSources } from './useSources'
 import { compileWall, buildKeyFor } from '../core/scene'
 import { buildInAE, defaultBuildFolder, hostInfoAE } from '../ae/build'
 
-type Tab = 'videos' | 'wall' | 'camera' | 'animate' | 'ae'
+type Tab = 'videos' | 'wall' | 'camera' | 'animate' | 'tiles' | 'ae'
 
 declare global {
   interface Window {
@@ -58,7 +59,7 @@ export default function App() {
   const sources = cfg.videos.length + cfg.comps.length
   return (
     <div
-      className={'app' + (dragOver ? ' dragging' : '')}
+      className={'app' + (dragOver ? ' dragging' : '') + (isDesktop() ? ' desktop' : '')}
       onDragEnter={(e) => {
         e.preventDefault()
         dragDepth.current++
@@ -136,6 +137,7 @@ export default function App() {
                 ['wall', 'Wall', TAB_ICONS.wall],
                 ['camera', 'Camera', TAB_ICONS.camera],
                 ['animate', 'Animate', TAB_ICONS.animate],
+                ['tiles', 'Tiles', TAB_ICONS.tiles],
                 ['ae', 'Build', TAB_ICONS.ae],
               ] as [Tab, string, ReactNode][]
             ).map(([t, label, icon]) => (
@@ -150,6 +152,7 @@ export default function App() {
             {tab === 'wall' && <WallPanel cfg={cfg} patch={patch} />}
             {tab === 'camera' && <CameraPanel cfg={cfg} patch={patch} />}
             {tab === 'animate' && <AnimatePanel cfg={cfg} patch={patch} />}
+            {tab === 'tiles' && <TilesPanel cfg={cfg} patch={patch} />}
             {tab === 'ae' && <BuildPanel cfg={cfg} />}
           </div>
         </aside>
@@ -183,6 +186,14 @@ const TAB_ICONS = {
     <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
       <path d="M8 1.6v5.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       <path d="M4.6 3.8a5.6 5.6 0 1 0 6.8 0" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  ),
+  tiles: (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+      <rect x="1.4" y="1.4" width="5.4" height="5.4" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <rect x="9.2" y="1.4" width="5.4" height="5.4" rx="1" fill="currentColor" opacity=".55" />
+      <rect x="1.4" y="9.2" width="5.4" height="5.4" rx="1" fill="currentColor" opacity=".55" />
+      <rect x="9.2" y="9.2" width="5.4" height="5.4" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
     </svg>
   ),
   ae: (

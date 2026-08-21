@@ -28,11 +28,46 @@ interface CepGlobal {
   util: { openURLInDefaultBrowser(url: string): { err: number } }
 }
 
+/** The desktop app's bridge (app/preload.cjs). Same capabilities, different host. */
+interface DesktopBridge {
+  desktop: true
+  readdir(p: string): { err: number; data: string[] }
+  stat(p: string): { err: number; dir: boolean; file: boolean }
+  writeText(p: string, t: string): { err: number; message?: string }
+  mkdirp(p: string): { err: number }
+  systemPath(k: string): string
+  pickFolder(title: string, initial: string): string | null
+  pickFiles(title: string, initial: string, exts: string[]): string[]
+  reveal(p: string): void
+  aeAvailable(): Promise<{ name: string | null }>
+  evalScript(code: string): Promise<string>
+  renderTiles(cfg: unknown, outDir: string, opts: unknown): Promise<{ ok: boolean; errors?: string[]; manifest?: unknown; cancelled?: boolean }>
+  cancelTiles(): Promise<boolean>
+  onTileProgress(fn: (p: Record<string, unknown>) => void): () => void
+  probeTools(): Promise<{ ffmpeg: string; ffprobe: string; version: string; ae: string | null }>
+}
+
 declare global {
   interface Window {
     __adobe_cep__?: AdobeCep
     cep?: CepGlobal
+    wallmaker?: DesktopBridge
   }
+}
+
+/** Running inside the standalone app rather than the After Effects panel. */
+export function isDesktop(): boolean {
+  return typeof window !== 'undefined' && !!window.wallmaker?.desktop
+}
+
+export function desktop(): DesktopBridge {
+  if (!window.wallmaker) throw new Error('The desktop bridge is not available')
+  return window.wallmaker
+}
+
+/** True wherever the real filesystem and After Effects are reachable — panel or app. */
+export function isNative(): boolean {
+  return isCEP() || isDesktop()
 }
 
 export function isCEP(): boolean {
@@ -60,6 +95,7 @@ export function jsonForES3(v: unknown): string {
 
 /** Runs ExtendScript in the host and resolves with its string result. */
 export function evalScript(code: string): Promise<string> {
+  if (isDesktop()) return desktop().evalScript(code)
   return new Promise((resolve, reject) => {
     if (!isCEP()) return reject(new Error('Not running inside After Effects'))
     window.__adobe_cep__!.evalScript(code, (res) => resolve(res ?? ''))
@@ -75,7 +111,8 @@ let hostReady: Promise<void> | null = null
  */
 export function ensureHost(): Promise<void> {
   if (!hostReady) {
-    const path = systemPath('extension') + '/host/index.jsx'
+    // the panel loads it from the CEP extension; the app ships the same file beside its bundle
+    const path = isDesktop() ? systemPath('host') : systemPath('extension') + '/host/index.jsx'
     // note: evaluated at top level on purpose — inside a function wrapper the file's globals would be local
     hostReady = evalScript(`$.evalFile(${JSON.stringify(path)}); typeof WALLMAKER`).then((r) => {
       if (r !== 'object') {
@@ -120,11 +157,16 @@ function fromFileUrl(u: string): string {
   return posixPath(p)
 }
 
-export function systemPath(type: 'userData' | 'extension' | 'myDocuments' | 'hostApplication'): string {
+export function systemPath(type: 'userData' | 'extension' | 'myDocuments' | 'hostApplication' | 'downloads' | 'host'): string {
+  if (isDesktop()) return posixPath(desktop().systemPath(type))
   return isCEP() ? fromFileUrl(window.__adobe_cep__!.getSystemPath(type)) : ''
 }
 
 export function mkdirp(path: string): void {
+  if (isDesktop()) {
+    if (desktop().mkdirp(path).err !== 0) throw new Error(`Could not create folder ${path}`)
+    return
+  }
   const fs = window.cep!.fs
   const norm = posixPath(path)
   const uncMatch = norm.match(/^\/\/[^/]+\/[^/]+/) // //server/share is a root, not something to create
@@ -152,17 +194,27 @@ export function mkdirp(path: string): void {
 }
 
 export function writeText(path: string, text: string): void {
+  if (isDesktop()) {
+    const d = desktop().writeText(path, text)
+    if (d.err !== 0) throw new Error(`Could not write ${path}${d.message ? `: ${d.message}` : ''}`)
+    return
+  }
   const r = window.cep!.fs.writeFile(path, text, window.cep!.encoding.UTF8)
   if (r.err !== 0) throw new Error(`Could not write ${path} (error ${r.err})`)
 }
 
 export function pickFolder(title: string, initial: string): string | null {
+  if (isDesktop()) {
+    const p = desktop().pickFolder(title, initial)
+    return p ? posixPath(p) : null
+  }
   const r = window.cep!.fs.showOpenDialogEx(false, true, title, initial)
   if (r.err !== 0 || !r.data || !r.data.length) return null
   return posixPath(fromFileUrl(r.data[0]))
 }
 
 export function pickFiles(title: string, initial: string, extensions: string[]): string[] {
+  if (isDesktop()) return desktop().pickFiles(title, initial, extensions).map(posixPath)
   const r = window.cep!.fs.showOpenDialogEx(true, false, title, initial, extensions)
   if (r.err !== 0 || !r.data || !r.data.length) return []
   return r.data.map(fromFileUrl)
@@ -170,7 +222,15 @@ export function pickFiles(title: string, initial: string, extensions: string[]):
 
 /** Recursively lists video files under a folder (panel-side, so it never blocks AE). */
 export function listVideos(folder: string, extensions: string[], limit = 5000): string[] {
-  const fs = window.cep!.fs
+  const fs = isDesktop()
+    ? {
+        readdir: (p: string) => desktop().readdir(p),
+        stat: (p: string) => {
+          const s = desktop().stat(p)
+          return { err: s.err, data: { isFile: () => s.file, isDirectory: () => s.dir } }
+        },
+      }
+    : window.cep!.fs
   const exts = new Set(extensions.map((e) => e.toLowerCase()))
   const out: string[] = []
   const walk = (dir: string, depth: number) => {

@@ -8,7 +8,7 @@
 import { execFile, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { promisify } from 'node:util'
-import { dirname, join, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DEFAULT_CONFIG } from '../src/core/defaults.ts'
 import { gridFor } from '../src/core/grid.ts'
@@ -17,7 +17,6 @@ import { planTiles, fillZoom } from '../src/core/tiles.ts'
 import { tileJobs } from '../src/render/tilecmd.ts'
 
 const run = promisify(execFile)
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 export async function probeDurations(paths, ffprobe = 'ffprobe') {
   const out = new Map()
@@ -67,8 +66,10 @@ export function manifestFor(cfg, grid, plan, files) {
   }
 }
 
-export async function renderTiles(cfg, outDir, opts = {}) {
-  const { codec = 'h264', quality = codec === 'prores' ? 3 : 40, maxTile = 4096, zoom, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', jobs = 3, onProgress = () => {} } = opts
+export async function renderTiles(rawCfg, outDir, opts = {}) {
+  // fill in anything the caller left out, so a partial config can never crash the renderer
+  const cfg = { ...DEFAULT_CONFIG, ...rawCfg }
+  const { codec = 'h264', quality = codec === 'prores' ? 3 : 40, maxTile = 4096, zoom, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', jobs = 3, onProgress = () => {}, shouldCancel = () => false, track = () => {} } = opts
   const anim = withAnimation(cfg)
   const grid = gridFor(anim)
   const screens = planScreens(anim, grid)
@@ -91,10 +92,11 @@ export async function renderTiles(cfg, outDir, opts = {}) {
     Array.from({ length: Math.max(1, jobs) }, async () => {
       for (;;) {
         const job = queue.shift()
-        if (!job) return
+        if (!job || shouldCancel()) return
         const t0 = Date.now()
         await new Promise((res) => {
           const p = spawn(ffmpeg, job.args, { stdio: ['ignore', 'ignore', 'pipe'] })
+          track(p)
           let err = ''
           p.stderr.on('data', (d) => { err += d.toString().slice(0, 2000) })
           p.on('close', (code) => {

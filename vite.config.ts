@@ -25,6 +25,23 @@ function cepHtmlPlugin(): Plugin {
 
 export default defineConfig(({ mode }) => {
   const CEP = mode === 'cep' || !!process.env.WALLMAKER_CEP
+  const APP = mode === 'app'
+  // the desktop build has the same file:// constraint as the panel, so it uses the same IIFE output
+  if (APP) {
+    return {
+      plugins: [react(), cepHtmlPlugin()],
+      base: './',
+      build: {
+        target: 'chrome120',
+        outDir: 'app/dist',
+        emptyOutDir: true,
+        assetsInlineLimit: 8 * 1024 * 1024,
+        modulePreload: false,
+        cssCodeSplit: false,
+        rollupOptions: { output: { format: 'iife', inlineDynamicImports: true, entryFileNames: 'assets/wallmaker.js', assetFileNames: 'assets/[name][extname]' } },
+      },
+    }
+  }
   return {
     plugins: [react(), ...(CEP ? [cepHtmlPlugin()] : [])],
     base: CEP ? './' : '/',

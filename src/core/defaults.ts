@@ -38,6 +38,11 @@ export const DEFAULT_CONFIG: Config = {
   background: 'solid',
   bgColor: '#0a0a0c',
 
+  tileZoom: 0,
+  tileCodec: 'h264',
+  tileQuality: 60,
+  tileMax: 4096,
+
   animate: false,
   reveal: 'random',
   revealStart: 0.5,

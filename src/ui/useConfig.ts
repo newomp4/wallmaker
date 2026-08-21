@@ -33,6 +33,7 @@ const ENUMS: Partial<Record<keyof Config, readonly string[]>> = {
   cellAspect: ['fill', 'wide', 'tv', 'square', 'tall', 'custom'],
   wallFit: ['contain', 'cover'],
   centerFit: ['grid', 'shift'],
+  tileCodec: ['h264', 'prores'],
   intro: ['none', 'zoomOut'],
   outro: ['none', 'zoomIn'],
 }

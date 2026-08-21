@@ -54,6 +54,12 @@ code { background: var(--surface2); padding: 1px 5px; border-radius: 4px; font-s
 .topbtns .btn { border-color: transparent; background: transparent; color: var(--text3); height: 26px; padding: 0 9px; font-weight: 500; }
 .topbtns .btn:hover { color: var(--text); background: var(--surface2); }
 .topbtns .btn.danger { color: var(--err); background: var(--surface); }
+/* the standalone app: leave room for the traffic lights, and a wider panel so every tab fits */
+.app.desktop .top { padding-left: 84px; -webkit-app-region: drag; }
+.app.desktop .top button, .app.desktop .top select { -webkit-app-region: no-drag; }
+.app.desktop .panel { width: 500px; flex: 0 0 500px; }
+.app.desktop .tabs button { padding-left: 9px; padding-right: 9px; }
+
 .main { display: flex; flex: 1 1 auto; min-height: 0; }
 .stage { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; background: var(--bg0); }
 .panel { width: 400px; flex: 0 0 400px; display: flex; flex-direction: column; background: var(--bg1); border-left: 1px solid var(--line); min-height: 0; }

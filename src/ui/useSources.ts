@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import type { Config, CompRef } from '../core/types'
 import { VIDEO_EXTENSIONS } from '../core/defaults'
-import { isCEP, pickFolder, pickFiles, listVideos, systemPath, callHost } from '../ae/cep'
+import { isNative, pickFolder, pickFiles, listVideos, systemPath, callHost } from '../ae/cep'
 
 export function dedupe(list: string[]): string[] {
   return [...new Set(list)]
@@ -19,7 +19,7 @@ export function dedupeComps(list: CompRef[]): CompRef[] {
 
 export function useSources(cfg: Config, patch: (p: Partial<Config>) => void) {
   const [error, setError] = useState('')
-  const inAE = isCEP()
+  const inAE = isNative()
 
   const addFolder = () => {
     setError('')
